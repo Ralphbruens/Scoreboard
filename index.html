@@ -1,43 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Scoreboard</title>
+  <meta charset="UTF-8">
+  <title>Live Scoreboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: sans-serif; text-align: center; }
-    table { margin: auto; border-collapse: collapse; width: 60%; }
-    th, td { border: 1px solid #ccc; padding: 0.5rem; }
-    th { background: #eee; }
-    .leader { background: gold; font-weight: bold; }
+    table { margin: 20px auto; border-collapse: collapse; width: 60%; }
+    th, td { padding: 10px; border: 1px solid #ccc; }
+    th { background-color: #4CAF50; color: white; }
+    tr:first-child { background-color: gold; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h1>Scoreboard</h1>
+  <h1>Live Scoreboard</h1>
   <table id="scoreTable">
     <thead><tr><th>Name</th><th>Score</th></tr></thead>
     <tbody></tbody>
   </table>
 
   <script>
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQZuaHsYDRldLWePSkvblbmSVBRYO5lSy1FW5AEav7ddozd4VjmIfLxAbysIu32f9SGnjiXY1aQ02x_/pub?gid=0&single=true&output=csv"; // paste published CSV link
+    // Replace with your Supabase project info
+    const SUPABASE_URL = 'https://dgvhgafduvtrjmxwuocj.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRndmhnYWZkdXZ0cmpteHd1b2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NzkxNjMsImV4cCI6MjA3MzE1NTE2M30.BV_w6EKkUWc-TKVLh1dpcnpuKT_2qNt1oo6Z3jReP_0';
+    const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     async function loadScores() {
-      let res = await fetch(sheetUrl);
-      let text = await res.text();
-      let rows = text.split("\n").map(r => r.split(","));
-      let data = rows.slice(1).map(r => ({name: r[0], score: parseInt(r[1])||0}));
-      data.sort((a,b) => b.score - a.score);
-      let tbody = document.querySelector("#scoreTable tbody");
-      tbody.innerHTML = "";
-      data.forEach((p,i) => {
-        let row = document.createElement("tr");
-        if(i===0) row.classList.add("leader");
-        row.innerHTML = `<td>${p.name}</td><td>${p.score}</td>`;
-        tbody.appendChild(row);
+      let { data, error } = await supabase
+        .from('scores')
+        .select('*')
+        .order('score', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching scores:', error);
+        return;
+      }
+
+      const tbody = document.querySelector('#scoreTable tbody');
+      tbody.innerHTML = '';
+
+      data.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        if (index === 0) tr.style.backgroundColor = 'gold';
+        tr.innerHTML = `<td>${row.name}</td><td>${row.score}</td>`;
+        tbody.appendChild(tr);
       });
     }
 
+    // Initial load
     loadScores();
-    setInterval(loadScores, 5000); // refresh every 5 seconds
+
+    // Subscribe to real-time changes
+    supabase
+      .channel('score-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, payload => {
+        loadScores();
+      })
+      .subscribe();
   </script>
 </body>
 </html>
