@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Simple Scoreboard</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2rem; }
+    form { margin-bottom: 1rem; }
+    input { margin: 0.3rem; padding: 0.4rem; }
+    button { padding: 0.5rem 1rem; }
+    table { margin: auto; border-collapse: collapse; width: 60%; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; }
+    th { background: #eee; }
+    .highscore { background: gold; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Scoreboard</h1>
+  <form id="scoreForm">
+    <input type="text" id="name" placeholder="Name" required>
+    <input type="number" id="score" placeholder="Score" required>
+    <button type="submit">Add / Update</button>
+  </form>
+
+  <table id="scoreTable">
+    <thead>
+      <tr><th>Name</th><th>Score</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    let scores = JSON.parse(localStorage.getItem("scores")) || [];
+
+    function renderScores() {
+      scores.sort((a, b) => b.score - a.score);
+      let tbody = document.querySelector("#scoreTable tbody");
+      tbody.innerHTML = "";
+      scores.forEach((entry, i) => {
+        let row = document.createElement("tr");
+        if (i === 0) row.classList.add("highscore");
+        row.innerHTML = `<td>${entry.name}</td><td>${entry.score}</td>`;
+        tbody.appendChild(row);
+      });
+      localStorage.setItem("scores", JSON.stringify(scores));
+    }
+
+    document.querySelector("#scoreForm").addEventListener("submit", e => {
+      e.preventDefault();
+      let name = document.querySelector("#name").value.trim();
+      let score = parseInt(document.querySelector("#score").value, 10);
+      if (!name || isNaN(score)) return;
+      let existing = scores.find(s => s.name === name);
+      if (existing) {
+        existing.score = score; // update
+      } else {
+        scores.push({ name, score });
+      }
+      renderScores();
+      e.target.reset();
+    });
+
+    renderScores();
+  </script>
+</body>
+</html>
