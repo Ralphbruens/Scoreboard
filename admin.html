@@ -6,12 +6,30 @@
   <title>Admin Panel</title>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f4f4f4; }
-    iframe { width: 100%; height: 80vh; border: none; }
   </style>
 </head>
 <body>
   <h1>Admin Panel</h1>
   <p>Enter scores below:</p>
-  <iframe src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQZuaHsYDRldLWePSkvblbmSVBRYO5lSy1FW5AEav7ddozd4VjmIfLxAbysIu32f9SGnjiXY1aQ02x_/pub?gid=0&single=true&output=csv"></iframe>
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.min.js"></script>
+  <script>
+    // Initialize Supabase client
+    const supabaseUrl = 'https://dgvhgafduvtrjmxwuocj.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRndmhnYWZkdXZ0cmpteHd1b2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NzkxNjMsImV4cCI6MjA3MzE1NTE2M30.BV_w6EKkUWc-TKVLh1dpcnpuKT_2qNt1oo6Z3jReP_0'; // Replace with your actual anon/public key
+    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+    // Example: Fetch all rows from 'scores' table
+    async function fetchScores() {
+      const { data, error } = await supabase.from('scores').select('*');
+      if (error) {
+        console.error('Error fetching scores:', error);
+      } else {
+        console.log('Scores:', data);
+      }
+    }
+    // Call fetchScores on page load
+    fetchScores();
+  </script>
 </body>
 </html>
