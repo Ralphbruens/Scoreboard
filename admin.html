@@ -18,10 +18,12 @@
     <button type="submit">Add / Update Score</button>
   </form>
 
-  <script>
-    const SUPABASE_URL = 'https://dgvhgafduvtrjmxwuocj.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRndmhnYWZkdXZ0cmpteHd1b2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NzkxNjMsImV4cCI6MjA3MzE1NTE2M30.BV_w6EKkUWc-TKVLh1dpcnpuKT_2qNt1oo6Z3jReP_0';
-    const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    <script>
+      // --- Supabase setup ---
+      // Replace with your Supabase project details
+      const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+      const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+      const supabase = window.Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     document.getElementById('scoreForm').addEventListener('submit', async e => {
       e.preventDefault();

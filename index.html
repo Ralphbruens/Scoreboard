@@ -2,59 +2,69 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Live Scoreboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; }
-    table { margin: 20px auto; border-collapse: collapse; width: 60%; }
-    th, td { padding: 10px; border: 1px solid #ccc; }
-    th { background-color: #4CAF50; color: white; }
-    tr:first-child { background-color: gold; font-weight: bold; }
+    body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; padding: 2rem; }
+    h1 { margin-bottom: 2rem; }
+    table { margin: 0 auto; border-collapse: collapse; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    th, td { padding: 1rem 2rem; border-bottom: 1px solid #eee; font-size: 1.2rem; }
+    th { background: #0077ff; color: #fff; }
+    tr:nth-child(even) { background: #f9f9f9; }
+    tr:nth-child(odd) { background: #e9e9e9; }
+    .top-score { background: gold !important; color: #222; font-weight: bold; }
   </style>
 </head>
 <body>
   <h1>Live Scoreboard</h1>
   <table id="scoreTable">
-    <thead><tr><th>Name</th><th>Score</th></tr></thead>
+    <thead>
+      <tr><th>Name</th><th>Score</th></tr>
+    </thead>
     <tbody></tbody>
   </table>
 
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // Replace with your Supabase project info
+    // TODO: Replace with your Supabase project details
     const SUPABASE_URL = 'https://dgvhgafduvtrjmxwuocj.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRndmhnYWZkdXZ0cmpteHd1b2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NzkxNjMsImV4cCI6MjA3MzE1NTE2M30.BV_w6EKkUWc-TKVLh1dpcnpuKT_2qNt1oo6Z3jReP_0';
-    const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRndmhnYWZkdXZ0cmpteHd1b2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NzkxNjMsImV4cCI6MjA3MzE1NTE2M30.BV_w6EKkUWc-TKVLh1dpcnpuKT_2qNt1oo6Z3jReP_0';
+    const supabase = window.Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    async function loadScores() {
-      let { data, error } = await supabase
-        .from('scores')
-        .select('*')
-        .order('score', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching scores:', error);
-        return;
-      }
-
+    // Render scores in table
+    function renderScores(scores) {
       const tbody = document.querySelector('#scoreTable tbody');
       tbody.innerHTML = '';
-
-      data.forEach((row, index) => {
+      scores.forEach((row, idx) => {
         const tr = document.createElement('tr');
-        if (index === 0) tr.style.backgroundColor = 'gold';
+        if (idx === 0) tr.classList.add('top-score');
         tr.innerHTML = `<td>${row.name}</td><td>${row.score}</td>`;
         tbody.appendChild(tr);
       });
     }
 
-    // Initial load
-    loadScores();
+    // Fetch and display scores
+    async function fetchScores() {
+      const { data, error } = await supabase
+        .from('scores')
+        .select('name,score')
+        .order('score', { ascending: false });
+      if (error) {
+        console.error('Error fetching scores:', error);
+        return;
+      }
+      renderScores(data || []);
+    }
 
-    // Subscribe to real-time changes
-    supabase
-      .channel('score-updates')
+    // Auto-refresh every 5 seconds
+    setInterval(fetchScores, 5000);
+    fetchScores();
+
+    // Optional: Real-time updates
+    supabase.channel('public:scores')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, payload => {
-        loadScores();
+        fetchScores();
       })
       .subscribe();
   </script>
