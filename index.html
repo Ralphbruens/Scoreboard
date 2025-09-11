@@ -7,13 +7,38 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Live Scoreboard</h1>
-  <table id="scoreTable">
-    <thead>
-      <tr><th>Name</th><th>Score</th></tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <h1>Unfair Games</h1>
+
+
+  <div class="scoreboard-row">
+    <div>
+      <h2>Last played</h2>
+      <table id="recentPlayers">
+        <thead>
+          <tr><th>Name</th><th>Score</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Top 10 Players of the Day</h2>
+  <table id="topDay" class="reverse-colors">
+        <thead>
+          <tr><th>Name</th><th>Score</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Top 10 Players of the Week</h2>
+      <table id="topWeek">
+        <thead>
+          <tr><th>Name</th><th>Score</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
 
   <!-- Supabase JS Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -24,39 +49,95 @@
     const { createClient } = window.supabase;
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Render scores in table
-    function renderScores(scores) {
-      const tbody = document.querySelector('#scoreTable tbody');
+    // Helper: format date
+    function formatDate(dateStr) {
+      const d = new Date(dateStr);
+      return d.toLocaleString();
+    }
+
+    // 1. Recent Players (Last 5)
+    async function loadRecentPlayers() {
+      const { data, error } = await supabase
+        .from('scores')
+        .select('name, score, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      const tbody = document.querySelector('#recentPlayers tbody');
       tbody.innerHTML = '';
-      scores.forEach((row, idx) => {
+      if (error) return tbody.innerHTML = `<tr><td colspan="3">Error</td></tr>`;
+      data.forEach(row => {
         const tr = document.createElement('tr');
-        if (idx === 0) tr.classList.add('top-score');
         tr.innerHTML = `<td>${row.name}</td><td>${row.score}</td>`;
         tbody.appendChild(tr);
       });
     }
 
-    // Fetch and display scores
-    async function fetchScores() {
+    // 2. Top 10 Players of the Day
+    async function loadTopDay() {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const isoStart = today.toISOString();
+      const isoEnd = new Date(today.getTime() + 24*60*60*1000).toISOString();
       const { data, error } = await supabase
         .from('scores')
-        .select('name,score')
-        .order('score', { ascending: false });
-      if (error) {
-        console.error('Error fetching scores:', error);
-        return;
-      }
-      renderScores(data || []);
+        .select('name, score')
+        .gte('created_at', isoStart)
+        .lt('created_at', isoEnd)
+        .order('score', { ascending: false })
+        .limit(10);
+      const tbody = document.querySelector('#topDay tbody');
+      tbody.innerHTML = '';
+      if (error) return tbody.innerHTML = `<tr><td colspan="2">Error</td></tr>`;
+      data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row.name}</td><td>${row.score}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 3. Top 10 Players of the Week
+    async function loadTopWeek() {
+      const now = new Date();
+      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
+      monday.setHours(0,0,0,0);
+      const isoStart = monday.toISOString();
+      const isoEnd = new Date(monday.getTime() + 7*24*60*60*1000).toISOString();
+      const { data, error } = await supabase
+        .from('scores')
+        .select('name, score')
+        .gte('created_at', isoStart)
+        .lt('created_at', isoEnd)
+        .order('score', { ascending: false })
+        .limit(10);
+      const tbody = document.querySelector('#topWeek tbody');
+      tbody.innerHTML = '';
+      if (error) return tbody.innerHTML = `<tr><td colspan="2">Error</td></tr>`;
+      data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row.name}</td><td>${row.score}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Load all scoreboards
+    async function loadScoreboards() {
+      await Promise.all([
+        loadRecentPlayers(),
+        loadTopDay(),
+        loadTopWeek()
+      ]);
     }
 
     // Auto-refresh every 5 seconds
-    setInterval(fetchScores, 5000);
-    fetchScores();
+    setInterval(loadScoreboards, 5000);
+    loadScoreboards();
 
     // Optional: Real-time updates
     supabase.channel('public:scores')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, payload => {
-        fetchScores();
+        loadScoreboards();
       })
       .subscribe();
   </script>

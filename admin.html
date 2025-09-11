@@ -14,6 +14,7 @@
     <button type="submit">Add / Update Score</button>
   </form>
 
+
     <script>
       // --- Supabase setup ---
       // Replace with your Supabase project details
@@ -31,11 +32,14 @@
       // Upsert: add new or update existing
       const { data, error } = await supabase
         .from('scores')
-        .upsert({ name, score });
+        .upsert({ name, score, created_at: new Date().toISOString() });
 
       if (error) console.error('Error updating score:', error);
       else document.getElementById('scoreForm').reset();
+      // Refresh scoreboards after update
+      loadScoreboards();
     });
+
   </script>
 </body>
 </html>

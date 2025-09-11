@@ -1,43 +1,87 @@
+/* Reverse color scheme for Top 10 Players of the Day table */
+.reverse-colors th {
+    background: #CBFF73;
+    color: #000;
+}
+.reverse-colors tr:nth-child(even) {
+    background: #CBFF73;
+    color: #000;
+}
+.reverse-colors tr:nth-child(odd) {
+    background: #000;
+    color: #CBFF73;
+}
 body {
     font-family: Arial, sans-serif;
     text-align: center;
-    background: #f4f4f4;
-    padding: 2rem;
-}
+    background: #CBFF73;
+   margin:0;
 
 h1 {
+    font-size: 6rem;
+    font-weight: 800;
+    letter-spacing: -0.06em;
     margin-bottom: 2rem;
 }
 
 table {
+    width:100vw;
     margin: 0 auto;
     border-collapse: collapse;
-    background: #fff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    
+}
+/* Flexbox row for scoreboard tables */
+.scoreboard-row {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    margin-top: 32px;
+}
+
+.scoreboard-row > div {
+    flex: 1 1 0;
+    min-width: 250px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+}
+
+th, td {
+    
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+   
 }
 
 th,
 td {
     padding: 1rem 2rem;
-    border-bottom: 1px solid #eee;
+    
     font-size: 1.2rem;
 }
 
 th {
-    background: #0077ff;
+    background: #000;
     color: #fff;
 }
 
 tr:nth-child(even) {
-    background: #f9f9f9;
+    background: #000;;
+    color: #CBFF73;;
 }
 
 tr:nth-child(odd) {
-    background: #e9e9e9;
+    background: #CBFF73;
+    color: #000
 }
 
 .top-score {
-    background: gold !important;
     color: #222;
     font-weight: bold;
 }
