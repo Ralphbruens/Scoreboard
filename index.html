@@ -90,7 +90,7 @@
     // --- Constants & State ---
     const DEFAULT_BONUS_PER_FIELD = { 1: 0, 2: 3, 3: 5, 4: 7, 5: 10 };
     let bonusPerField = { ...DEFAULT_BONUS_PER_FIELD };
-    let players = [];
+    let name = [];
     let timersStartedAt = null;
     let stoppedFields = new Set();
     let globalTimerInterval = null;
@@ -115,7 +115,7 @@
     async function fetchTodayPlayers() {
       const { start, end } = todayRangeISO();
       const { data, error } = await supabase
-        .from('players')
+        .from('name')
         .select('*')
         .gte('created_at', start)
         .lt('created_at', end)
@@ -184,7 +184,7 @@
     async function resetTodayPlayers() {
       const { start, end } = todayRangeISO();
       const { error } = await supabase
-        .from('players')
+        .from('name')
         .delete()
         .gte('created_at', start)
         .lt('created_at', end);
