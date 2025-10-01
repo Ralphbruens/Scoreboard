@@ -3,143 +3,374 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Scoreboard</title>
+  <title>UnfairPlay</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <h1>UnfairPlay</h1>
 
+  <!-- Check-in Screen -->
+  <section id="checkinScreen">
+    <h2>Check-in</h2>
+    <form id="checkinForm">
+      <input type="text" id="playerName" placeholder="Player name" required>
+      <button type="submit">Add Player</button>
+    </form>
+    <div style="margin-top:1rem">
+      <button id="resetToday" type="button">Reset Today</button>
+    </div>
+    <h3 style="margin-top:1.5rem">Assigned Fields (1–5)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Player</th>
+          <th>Bonus (s)</th>
+        </tr>
+      </thead>
+      <tbody id="checkinTable"></tbody>
+    </table>
+    <div style="margin-top:1rem">
+      <button id="goToRecord" type="button" disabled>Go to Recording</button>
+    </div>
+  </section>
 
-  <div class="scoreboard-row">
-    <div>
-      <h2>Last played</h2>
-      <table id="recentPlayers">
-        <thead>
-          <tr><th>Name</th><th>Score</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+  <!-- Recording Screen -->
+  <section id="recordScreen" style="display:none">
+    <h2>Record Times</h2>
+    <div style="margin-bottom:1rem">
+      <button id="startAll" type="button">Start All</button>
+      <span id="globalElapsed" style="margin-left:1rem;font-weight:bold">00:00.0</span>
     </div>
-    <div>
-      <h2>Top 10 Players of the Day</h2>
-  <table id="topDay" class="reverse-colors">
-        <thead>
-          <tr><th>Name</th><th>Score</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Player</th>
+          <th>Timer</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="recordTable"></tbody>
+    </table>
+    <div style="margin-top:1rem">
+      <button id="goToEnd" type="button" disabled>Go to End Scores</button>
     </div>
-    <div>
-      <h2>Top 10 Players of the Week</h2>
-      <table id="topWeek">
-        <thead>
-          <tr><th>Name</th><th>Score</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
+  </section>
 
-  <!-- Supabase JS Client -->
+  <!-- End Score Screen -->
+  <section id="endScreen" style="display:none">
+    <h2>End Scores</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Player</th>
+          <th>Bruto (s)</th>
+          <th>Bonus (s)</th>
+          <th>Netto (s)</th>
+          <th>Breakdown</th>
+        </tr>
+      </thead>
+      <tbody id="endTable"></tbody>
+    </table>
+    <div style="margin-top:1rem">
+      <button id="backToCheckin" type="button">New Round</button>
+    </div>
+  </section>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // TODO: Replace with your Supabase project details
+    // --- Supabase setup ---
     const SUPABASE_URL = 'https://dgvhgafduvtrjmxwuocj.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRndmhnYWZkdXZ0cmpteHd1b2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NzkxNjMsImV4cCI6MjA3MzE1NTE2M30.BV_w6EKkUWc-TKVLh1dpcnpuKT_2qNt1oo6Z3jReP_0';
     const { createClient } = window.supabase;
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Helper: format date
-    function formatDate(dateStr) {
-      const d = new Date(dateStr);
-      return d.toLocaleString();
+    // --- Constants & State ---
+    const DEFAULT_BONUS_PER_FIELD = { 1: 0, 2: 3, 3: 5, 4: 7, 5: 10 };
+    let bonusPerField = { ...DEFAULT_BONUS_PER_FIELD };
+    let players = [];
+    let timersStartedAt = null;
+    let stoppedFields = new Set();
+    let globalTimerInterval = null;
+
+    // --- Utils ---
+    function todayRangeISO() {
+      const start = new Date();
+      start.setHours(0,0,0,0);
+      const end = new Date(start.getTime() + 24*60*60*1000);
+      return { start: start.toISOString(), end: end.toISOString() };
+    }
+    function formatMs(ms) {
+      if (ms == null) return '—';
+      const totalTenths = Math.floor(ms / 100);
+      const minutes = Math.floor(totalTenths / 600);
+      const seconds = Math.floor((totalTenths % 600) / 10);
+      const tenths = totalTenths % 10;
+      return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}.${tenths}`;
     }
 
-    // 1. Recent Players (Last 5)
-    async function loadRecentPlayers() {
+    // --- Data Access ---
+    async function fetchTodayPlayers() {
+      const { start, end } = todayRangeISO();
       const { data, error } = await supabase
-        .from('scores')
-        .select('name, score, created_at')
-        .order('created_at', { ascending: false })
-        .limit(5);
-      const tbody = document.querySelector('#recentPlayers tbody');
+        .from('players')
+        .select('*')
+        .gte('created_at', start)
+        .lt('created_at', end)
+        .order('field_number', { ascending: true });
+      if (error) {
+        console.error('Fetch players error', error);
+        return [];
+      }
+      return data || [];
+    }
+
+    async function upsertPlayer(name, fieldNumber, bonus) {
+      const payload = {
+        name,
+        field_number: fieldNumber,
+        bonus_score: bonus,
+      };
+      const { data, error } = await supabase
+        .from('players')
+        .upsert(payload)
+        .select();
+      if (error) console.error('Upsert player error', error);
+      return data?.[0] || null;
+    }
+
+    async function updatePlayerScores(id, brutoSeconds, nettoSeconds) {
+      const { error } = await supabase
+        .from('players')
+        .update({ bruto_score: brutoSeconds, netto_score: nettoSeconds })
+        .eq('id', id);
+      if (error) console.error('Update scores error', error);
+    }
+
+    async function updateFieldBonus(fieldNumber, bonus) {
+      const { error } = await supabase
+        .from('players')
+        .update({ bonus_score: bonus })
+        .eq('field_number', fieldNumber)
+        .gte('created_at', todayRangeISO().start);
+      if (error) console.error('Update bonus error', error);
+    }
+
+    async function resetTodayPlayers() {
+      const { start, end } = todayRangeISO();
+      const { error } = await supabase
+        .from('players')
+        .delete()
+        .gte('created_at', start)
+        .lt('created_at', end);
+      if (error) console.error('Reset today error', error);
+    }
+
+    // --- UI Rendering ---
+    function renderCheckin() {
+      const tbody = document.getElementById('checkinTable');
       tbody.innerHTML = '';
-      if (error) return tbody.innerHTML = `<tr><td colspan="3">Error</td></tr>`;
-      data.forEach(row => {
+      for (let f = 1; f <= 5; f++) {
+        const player = players.find(p => p.field_number === f);
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.name}</td><td>${row.score}</td>`;
+        const bonusVal = player?.bonus_score ?? bonusPerField[f] ?? 0;
+        tr.innerHTML = `
+          <td>${f}</td>
+          <td>${player ? player.name : ''}</td>
+          <td>
+            <input data-field="${f}" class="bonusInput" type="number" value="${bonusVal}" style="width:6rem">
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+      // Toggle button state
+      const goBtn = document.getElementById('goToRecord');
+      goBtn.disabled = players.length !== 5;
+      // Wire bonus inputs
+      document.querySelectorAll('.bonusInput').forEach(inp => {
+        inp.addEventListener('change', async e => {
+          const field = parseInt(e.target.getAttribute('data-field'), 10);
+          const val = parseInt(e.target.value, 10) || 0;
+          bonusPerField[field] = val;
+          // Persist to any existing player on that field (today)
+          await updateFieldBonus(field, val);
+          await refreshState();
+        });
+      });
+    }
+
+    function renderRecord() {
+      const tbody = document.getElementById('recordTable');
+      tbody.innerHTML = '';
+      players.forEach(p => {
+        const tr = document.createElement('tr');
+        const elapsedMs = timersStartedAt && !stoppedFields.has(p.field_number)
+          ? Date.now() - timersStartedAt
+          : (p.bruto_score != null ? p.bruto_score * 1000 : null);
+        tr.innerHTML = `
+          <td>${p.field_number}</td>
+          <td>${p.name}</td>
+          <td id="timer-${p.field_number}">${formatMs(elapsedMs)}</td>
+          <td>
+            <button data-field="${p.field_number}" class="stopBtn" ${p.bruto_score != null ? 'disabled' : ''}>Stop</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      // Enable end button when all stopped and have netto
+      const allStopped = players.length === 5 && players.every(p => p.bruto_score != null);
+      document.getElementById('goToEnd').disabled = !allStopped;
+
+      // Wire stop buttons
+      document.querySelectorAll('.stopBtn').forEach(btn => {
+        btn.addEventListener('click', async e => {
+          const field = parseInt(e.target.getAttribute('data-field'), 10);
+          if (!timersStartedAt) return;
+          if (stoppedFields.has(field)) return;
+          stoppedFields.add(field);
+          const player = players.find(p => p.field_number === field);
+          const elapsedSec = Math.round((Date.now() - timersStartedAt) / 1000);
+          const bonus = player?.bonus_score ?? bonusPerField[field] ?? 0;
+          const netto = elapsedSec + bonus;
+          await updatePlayerScores(player.id, elapsedSec, netto);
+          await refreshState();
+        });
+      });
+    }
+
+    function renderEnd() {
+      const tbody = document.getElementById('endTable');
+      tbody.innerHTML = '';
+      players.forEach(p => {
+        const bruto = p.bruto_score ?? 0;
+        const bonus = p.bonus_score ?? 0;
+        const netto = p.netto_score ?? (p.bruto_score != null ? p.bruto_score + bonus : null);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${p.field_number}</td>
+          <td>${p.name}</td>
+          <td>${bruto}</td>
+          <td>${bonus}</td>
+          <td>${netto ?? '—'}</td>
+          <td>Bruto: ${bruto}s + Bonus: ${bonus}s = Netto: ${netto ?? '—'}s</td>
+        `;
         tbody.appendChild(tr);
       });
     }
 
-    // 2. Top 10 Players of the Day
-    async function loadTopDay() {
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const isoStart = today.toISOString();
-      const isoEnd = new Date(today.getTime() + 24*60*60*1000).toISOString();
-      const { data, error } = await supabase
-        .from('scores')
-        .select('name, score')
-        .gte('created_at', isoStart)
-        .lt('created_at', isoEnd)
-        .order('score', { ascending: false })
-        .limit(10);
-      const tbody = document.querySelector('#topDay tbody');
-      tbody.innerHTML = '';
-      if (error) return tbody.innerHTML = `<tr><td colspan="2">Error</td></tr>`;
-      data.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.name}</td><td>${row.score}</td>`;
-        tbody.appendChild(tr);
+    // --- Flow Controls ---
+    function show(screenId) {
+      document.getElementById('checkinScreen').style.display = screenId === 'checkin' ? '' : 'none';
+      document.getElementById('recordScreen').style.display = screenId === 'record' ? '' : 'none';
+      document.getElementById('endScreen').style.display = screenId === 'end' ? '' : 'none';
+    }
+
+    async function refreshState() {
+      players = await fetchTodayPlayers();
+      // adopt latest bonuses into local cache
+      players.forEach(p => {
+        if (p.bonus_score != null) bonusPerField[p.field_number] = p.bonus_score;
       });
+      renderCheckin();
+      renderRecord();
+      renderEnd();
     }
 
-    // 3. Top 10 Players of the Week
-    async function loadTopWeek() {
-      const now = new Date();
-      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
-      monday.setHours(0,0,0,0);
-      const isoStart = monday.toISOString();
-      const isoEnd = new Date(monday.getTime() + 7*24*60*60*1000).toISOString();
-      const { data, error } = await supabase
-        .from('scores')
-        .select('name, score')
-        .gte('created_at', isoStart)
-        .lt('created_at', isoEnd)
-        .order('score', { ascending: false })
-        .limit(10);
-      const tbody = document.querySelector('#topWeek tbody');
-      tbody.innerHTML = '';
-      if (error) return tbody.innerHTML = `<tr><td colspan="2">Error</td></tr>`;
-      data.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.name}</td><td>${row.score}</td>`;
-        tbody.appendChild(tr);
-      });
+    function findNextAvailableField() {
+      for (let f = 1; f <= 5; f++) {
+        if (!players.some(p => p.field_number === f)) return f;
+      }
+      return null;
     }
 
-    // Load all scoreboards
-    async function loadScoreboards() {
-      await Promise.all([
-        loadRecentPlayers(),
-        loadTopDay(),
-        loadTopWeek()
-      ]);
+    function startGlobalTimer() {
+      if (timersStartedAt) return;
+      timersStartedAt = Date.now();
+      globalTimerInterval = setInterval(() => {
+        // update displays
+        players.forEach(p => {
+          const el = document.getElementById(`timer-${p.field_number}`);
+          if (!el) return;
+          if (p.bruto_score != null) return; // already stopped
+          el.textContent = formatMs(Date.now() - timersStartedAt);
+        });
+        const globalEl = document.getElementById('globalElapsed');
+        if (globalEl) globalEl.textContent = formatMs(Date.now() - timersStartedAt);
+      }, 100);
     }
 
-    // Auto-refresh every 5 seconds
-    setInterval(loadScoreboards, 5000);
-    loadScoreboards();
+    function stopGlobalTimerIfAllStopped() {
+      const allStopped = players.length === 5 && players.every(p => p.bruto_score != null);
+      if (allStopped && globalTimerInterval) {
+        clearInterval(globalTimerInterval);
+        globalTimerInterval = null;
+      }
+    }
 
-    // Optional: Real-time updates
-    supabase.channel('public:scores')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, payload => {
-        loadScoreboards();
+    // --- Event Listeners ---
+    document.getElementById('checkinForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const name = document.getElementById('playerName').value.trim();
+      if (!name) return;
+      if (players.length >= 5) return;
+      const field = findNextAvailableField();
+      if (field == null) return;
+      const bonus = bonusPerField[field] ?? 0;
+      await upsertPlayer(name, field, bonus);
+      (document.getElementById('playerName')).value = '';
+      await refreshState();
+    });
+
+    document.getElementById('resetToday').addEventListener('click', async () => {
+      await resetTodayPlayers();
+      timersStartedAt = null;
+      stoppedFields = new Set();
+      if (globalTimerInterval) clearInterval(globalTimerInterval);
+      globalTimerInterval = null;
+      document.getElementById('globalElapsed').textContent = '00:00.0';
+      await refreshState();
+    });
+
+    document.getElementById('goToRecord').addEventListener('click', () => {
+      show('record');
+    });
+
+    document.getElementById('startAll').addEventListener('click', () => {
+      startGlobalTimer();
+    });
+
+    document.getElementById('goToEnd').addEventListener('click', () => {
+      stopGlobalTimerIfAllStopped();
+      show('end');
+    });
+
+    document.getElementById('backToCheckin').addEventListener('click', async () => {
+      await resetTodayPlayers();
+      timersStartedAt = null;
+      stoppedFields = new Set();
+      if (globalTimerInterval) clearInterval(globalTimerInterval);
+      globalTimerInterval = null;
+      document.getElementById('globalElapsed').textContent = '00:00.0';
+      await refreshState();
+      show('checkin');
+    });
+
+    // --- Realtime Subscriptions ---
+    supabase
+      .channel('public:players')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, async () => {
+        await refreshState();
+        stopGlobalTimerIfAllStopped();
       })
       .subscribe();
+
+    // Initial load
+    (async function init() {
+      await refreshState();
+      show('checkin');
+    })();
   </script>
 </body>
 </html>
