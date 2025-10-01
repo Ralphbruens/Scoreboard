@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UnfairPlay • Field Station</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Field Station</h1>
+
+  <section id="selectField">
+    <h2>Select Field</h2>
+    <div>
+      <button class="chooseField" data-field="1">Field 1</button>
+      <button class="chooseField" data-field="2">Field 2</button>
+      <button class="chooseField" data-field="3">Field 3</button>
+      <button class="chooseField" data-field="4">Field 4</button>
+      <button class="chooseField" data-field="5">Field 5</button>
+    </div>
+  </section>
+
+  <section id="station" style="display:none">
+    <h2 id="stationTitle">Field</h2>
+    <div style="font-size:2rem;margin:1rem 0" id="playerName">—</div>
+    <div style="font-size:3rem;font-weight:800;margin:0.5rem 0" id="elapsed">00:00.0</div>
+    <div style="margin:1rem 0">Bonus: <span id="bonus">0</span>s</div>
+    <div>
+      <button id="markFinished" type="button">Stop / Record</button>
+      <button id="switchField" type="button" style="margin-left:0.5rem">Switch Field</button>
+    </div>
+  </section>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // --- Supabase setup ---
+    const SUPABASE_URL = 'https://dgvhgafduvtrjmxwuocj.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRndmhnYWZkdXZ0cmpteHd1b2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NzkxNjMsImV4cCI6MjA3MzE1NTE2M30.BV_w6EKkUWc-TKVLh1dpcnpuKT_2qNt1oo6Z3jReP_0';
+    const { createClient } = window.supabase;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // --- State ---
+    let fieldNumber = null;
+    let currentPlayer = null;
+    let roundStartedAt = null;
+    let ticker = null;
+
+    // --- Utils ---
+    function formatMs(ms) {
+      if (ms == null) return '—';
+      const totalTenths = Math.floor(ms / 100);
+      const minutes = Math.floor(totalTenths / 600);
+      const seconds = Math.floor((totalTenths % 600) / 10);
+      const tenths = totalTenths % 10;
+      return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}.${tenths}`;
+    }
+    function todayRangeISO() {
+      const start = new Date();
+      start.setHours(0,0,0,0);
+      const end = new Date(start.getTime() + 24*60*60*1000);
+      return { start: start.toISOString(), end: end.toISOString() };
+    }
+
+    // --- Data Access ---
+    async function fetchFieldPlayer(f)() {
+      const { start, end } = todayRangeISO();
+      const { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .eq('field_number', f)
+        .gte('created_at', start)
+        .lt('created_at', end)
+        .limit(1)
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') {
+        console.error('fetchFieldPlayer error', error);
+        return null;
+      }
+      return data || null;
+    }
+    async function fetchRoundStart() {
+      const { data, error } = await supabase
+        .from('game_state')
+        .select('value')
+        .eq('key', 'round_start')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') {
+        console.error('fetchRoundStart error', error);
+        return null;
+      }
+      return data?.value?.started_at || null;
+    }
+    async function updateScores(playerId, brutoSeconds, bonus) {
+      const netto = brutoSeconds + (bonus || 0);
+      const { error } = await supabase
+        .from('players')
+        .update({ bruto_score: brutoSeconds, netto_score: netto })
+        .eq('id', playerId);
+      if (error) console.error('updateScores error', error);
+    }
+
+    // --- Rendering ---
+    function renderStation() {
+      document.getElementById('stationTitle').textContent = `Field ${fieldNumber}`;
+      document.getElementById('playerName').textContent = currentPlayer ? currentPlayer.name : '—';
+      document.getElementById('bonus').textContent = currentPlayer?.bonus_score ?? 0;
+      const stopped = currentPlayer && currentPlayer.bruto_score != null;
+      document.getElementById('markFinished').disabled = !currentPlayer || stopped || !roundStartedAt;
+    }
+    function startTicker() {
+      if (ticker) clearInterval(ticker);
+      ticker = setInterval(() => {
+        if (!roundStartedAt) return;
+        const started = new Date(roundStartedAt).getTime();
+        const ms = Math.max(0, Date.now() - started);
+        // If player already stopped, show fixed bruto
+        const msShown = currentPlayer?.bruto_score != null ? currentPlayer.bruto_score * 1000 : ms;
+        document.getElementById('elapsed').textContent = formatMs(msShown);
+      }, 100);
+    }
+
+    // --- Events ---
+    document.querySelectorAll('.chooseField').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        fieldNumber = parseInt(e.target.getAttribute('data-field'), 10);
+        document.getElementById('selectField').style.display = 'none';
+        document.getElementById('station').style.display = '';
+        await hydrate();
+      });
+    });
+    document.getElementById('switchField').addEventListener('click', () => {
+      fieldNumber = null;
+      currentPlayer = null;
+      document.getElementById('elapsed').textContent = '00:00.0';
+      document.getElementById('station').style.display = 'none';
+      document.getElementById('selectField').style.display = '';
+    });
+    document.getElementById('markFinished').addEventListener('click', async () => {
+      if (!currentPlayer || !roundStartedAt) return;
+      const started = new Date(roundStartedAt).getTime();
+      const elapsedSec = Math.round((Date.now() - started) / 1000);
+      const bonus = currentPlayer?.bonus_score || 0;
+      await updateScores(currentPlayer.id, elapsedSec, bonus);
+    });
+
+    // --- Realtime ---
+    supabase
+      .channel('public:players:field')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, async (payload) => {
+        if (fieldNumber == null) return;
+        await hydrate();
+      })
+      .subscribe();
+    supabase
+      .channel('public:game_state')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_state' }, async () => {
+        roundStartedAt = await fetchRoundStart();
+        startTicker();
+        renderStation();
+      })
+      .subscribe();
+
+    // --- Hydration ---
+    async function hydrate() {
+      if (fieldNumber == null) return;
+      currentPlayer = await fetchFieldPlayer(fieldNumber);
+      roundStartedAt = await fetchRoundStart();
+      renderStation();
+      startTicker();
+    }
+
+    // Support query param ?field=1..5
+    (function initFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      const f = parseInt(params.get('field'), 10);
+      if (f >= 1 && f <= 5) {
+        fieldNumber = f;
+        document.getElementById('selectField').style.display = 'none';
+        document.getElementById('station').style.display = '';
+        hydrate();
+      }
+    })();
+  </script>
+</body>
+</html>
+

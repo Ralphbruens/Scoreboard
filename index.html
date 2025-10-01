@@ -135,7 +135,7 @@
       };
       const { data, error } = await supabase
         .from('players')
-        .upsert(payload)
+        .upsert(payload, { onConflict: 'field_number' })
         .select();
       if (error) console.error('Upsert player error', error);
       return data?.[0] || null;
@@ -156,6 +156,29 @@
         .eq('field_number', fieldNumber)
         .gte('created_at', todayRangeISO().start);
       if (error) console.error('Update bonus error', error);
+    }
+
+    // --- Shared Round Start in game_state ---
+    async function setRoundStart() {
+      const startedAt = new Date().toISOString();
+      const payload = { key: 'round_start', value: { started_at: startedAt } };
+      const { error } = await supabase
+        .from('game_state')
+        .upsert(payload, { onConflict: 'key' });
+      if (error) console.error('setRoundStart error', error);
+      return startedAt;
+    }
+    async function fetchRoundStart() {
+      const { data, error } = await supabase
+        .from('game_state')
+        .select('value')
+        .eq('key', 'round_start')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') {
+        console.error('fetchRoundStart error', error);
+        return null;
+      }
+      return data?.value?.started_at || null;
     }
 
     async function resetTodayPlayers() {
@@ -285,9 +308,10 @@
       return null;
     }
 
-    function startGlobalTimer() {
+    async function startGlobalTimer() {
       if (timersStartedAt) return;
-      timersStartedAt = Date.now();
+      const startedAtISO = await fetchRoundStart() || await setRoundStart();
+      timersStartedAt = new Date(startedAtISO).getTime();
       globalTimerInterval = setInterval(() => {
         // update displays
         players.forEach(p => {
@@ -330,6 +354,8 @@
       if (globalTimerInterval) clearInterval(globalTimerInterval);
       globalTimerInterval = null;
       document.getElementById('globalElapsed').textContent = '00:00.0';
+      // clear round_start
+      await supabase.from('game_state').delete().eq('key', 'round_start');
       await refreshState();
     });
 
@@ -366,9 +392,27 @@
       })
       .subscribe();
 
+    supabase
+      .channel('public:game_state')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_state' }, async () => {
+        const startedAtISO = await fetchRoundStart();
+        if (startedAtISO) {
+          if (!timersStartedAt) {
+            timersStartedAt = new Date(startedAtISO).getTime();
+            startGlobalTimer();
+          }
+        }
+      })
+      .subscribe();
+
     // Initial load
     (async function init() {
       await refreshState();
+      const startedAtISO = await fetchRoundStart();
+      if (startedAtISO) {
+        timersStartedAt = new Date(startedAtISO).getTime();
+        startGlobalTimer();
+      }
       show('checkin');
     })();
   </script>
