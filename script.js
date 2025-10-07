@@ -180,11 +180,42 @@ class ScoreboardApp {
         try {
             console.log('🔄 Loading waiting players...');
 
+            // First, get the most recent check-in time for unrecorded players
+            const { data: allWaiting, error: waitingError } = await this.supabase
+                .from('players')
+                .select('*')
+                .is('bruto_score', null)
+                .order('checkin_time', { ascending: false })
+                .limit(1);
+
+            if (waitingError) {
+                console.error('Error loading players:', waitingError);
+                alert('Failed to load players: ' + waitingError.message);
+                return;
+            }
+
+            if (!allWaiting || allWaiting.length === 0) {
+                console.log('No players waiting to record');
+                this.showNoPlayersMessage();
+                return;
+            }
+
+            const mostRecentCheckinTime = allWaiting[0].checkin_time;
+            const mostRecentDate = new Date(mostRecentCheckinTime);
+            
+            // Get all players checked in within the same second (same batch)
+            // This groups players checked in together
+            const timeWindowStart = new Date(mostRecentDate.getTime() - 2000); // 2 second window before
+            const timeWindowEnd = new Date(mostRecentDate.getTime() + 2000);   // 2 second window after
+
             const { data, error } = await this.supabase
                 .from('players')
                 .select('*')
                 .is('bruto_score', null)
-                .order('checkin_time', { ascending: true });
+                .gte('checkin_time', timeWindowStart.toISOString())
+                .lte('checkin_time', timeWindowEnd.toISOString())
+                .order('checkin_time', { ascending: true })
+                .limit(5); // Maximum 5 players per recording session
 
             if (error) {
                 console.error('Error loading players:', error);
@@ -194,7 +225,7 @@ class ScoreboardApp {
 
             if (data && data.length > 0) {
                 this.currentPlayers = data;
-                console.log(`✅ Loaded ${data.length} player(s)`);
+                console.log(`✅ Loaded ${data.length} player(s) from the same check-in batch`);
                 this.displayWaitingPlayers();
             } else {
                 console.log('No players waiting to record');
