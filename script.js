@@ -117,6 +117,29 @@ class ScoreboardApp {
         }
     }
 
+    async saveSessionData() {
+        if (!this.supabase) return;
+
+        try {
+            const { error } = await this.supabase
+                .from('sessions')
+                .upsert({
+                    id: this.sessionData.id,
+                    room_code: this.sessionData.roomCode,
+                    data: this.sessionData,
+                    updated_at: new Date().toISOString()
+                });
+
+            if (error) {
+                console.error('Error saving session:', error);
+            } else {
+                console.log('Session data saved successfully');
+            }
+        } catch (error) {
+            console.error('Error in saveSessionData:', error);
+        }
+    }
+
     setupRealtimeSubscription() {
         if (!this.supabase) return;
     
