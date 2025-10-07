@@ -128,6 +128,9 @@ class ScoreboardApp {
         }
 
         try {
+            // Set saving flag to prevent polling conflicts
+            this.isSaving = true;
+            
             // Update the lastUpdated timestamp
             this.sessionData.lastUpdated = Date.now();
             
@@ -137,7 +140,7 @@ class ScoreboardApp {
                 updated_at: new Date().toISOString()
             };
 
-            console.log('Saving session data for room:', this.sessionData.roomCode);
+            console.log('📤 Saving session data for room:', this.sessionData.roomCode);
             
             // Use upsert with onConflict to update existing records
             const { data, error } = await this.supabase
@@ -157,7 +160,7 @@ class ScoreboardApp {
                     code: error.code
                 });
             } else {
-                console.log('Session data saved successfully to database');
+                console.log('✅ Session data saved successfully to database');
                 // Store the database ID if this is the first save
                 if (data && data.length > 0 && !this.sessionData.id) {
                     this.sessionData.id = data[0].id;
@@ -166,6 +169,9 @@ class ScoreboardApp {
             }
         } catch (error) {
             console.error('Error in saveSessionData:', error);
+        } finally {
+            // Clear saving flag
+            this.isSaving = false;
         }
     }
 
@@ -175,62 +181,23 @@ class ScoreboardApp {
             return;
         }
     
-        console.log('Setting up real-time subscription for room:', this.sessionData.roomCode);
+        console.log('⚠️ Realtime replication not available, using polling mode');
+        console.log('Checking for updates every 1 second for room:', this.sessionData.roomCode);
     
-        const channel = this.supabase
-            .channel('sessions-' + this.sessionData.roomCode)
-            .on('postgres_changes', 
-                { 
-                    event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
-                    schema: 'public', 
-                    table: 'sessions',
-                    filter: `room_code=eq.${this.sessionData.roomCode}`
-                }, 
-                (payload) => {
-                    console.log('Real-time update received:', payload);
-                    
-                    // Check if this update is for our room
-                    if (!payload.new || payload.new.room_code !== this.sessionData.roomCode) {
-                        console.log('Update not for our room, ignoring');
-                        return;
-                    }
-                    
-                    const newSessionData = payload.new.data;
-                    
-                    // Don't update if this is our own change (prevent loops)
-                    if (newSessionData.lastUpdated <= this.sessionData.lastUpdated) {
-                        console.log('Update is older or same, ignoring');
-                        return;
-                    }
-                    
-                    console.log('Applying real-time update:', newSessionData);
-                    
-                    this.sessionData = newSessionData;
-                    this.players = [...this.sessionData.players];
-                    this.bonusScores = [...this.sessionData.bonusScores];
-                    this.isRecording = this.sessionData.isRecording;
-                    this.brutoScores = [...this.sessionData.brutoScores];
-                    this.sessionResults = [...this.sessionData.sessionResults];
-                    
-                    this.updateUIFromSessionData();
-                })
-            .subscribe((status) => {
-                console.log('Realtime subscription status:', status);
-                if (status === 'SUBSCRIBED') {
-                    console.log('✅ Successfully subscribed to real-time updates');
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error('❌ Real-time subscription failed');
-                }
-            });
-
-        // Also set up a polling fallback every 2 seconds
+        // Use polling as primary sync method (since realtime is not available)
         this.pollingInterval = setInterval(async () => {
             await this.checkForUpdates();
-        }, 2000);
+        }, 1000); // Check every 1 second for better responsiveness
+        
+        // Also check immediately
+        this.checkForUpdates();
     }
 
     async checkForUpdates() {
         if (!this.supabase) return;
+        
+        // Don't check if we're currently saving (prevents conflicts)
+        if (this.isSaving) return;
 
         try {
             const { data, error } = await this.supabase
@@ -240,24 +207,48 @@ class ScoreboardApp {
                 .single();
 
             if (error) {
-                console.log('Polling check failed:', error);
+                if (error.code !== 'PGRST116') { // Ignore "not found" errors
+                    console.log('Polling check failed:', error);
+                }
                 return;
             }
 
             if (data && data.data.lastUpdated > this.sessionData.lastUpdated) {
-                console.log('Polling found newer data, updating...');
+                console.log('📥 Found newer data, updating UI...');
                 
+                // Store the database ID
+                const dbId = data.id;
+                
+                // Update session data
                 this.sessionData = data.data;
+                this.sessionData.id = dbId;
+                
+                // Update local state
                 this.players = [...this.sessionData.players];
                 this.bonusScores = [...this.sessionData.bonusScores];
                 this.isRecording = this.sessionData.isRecording;
                 this.brutoScores = [...this.sessionData.brutoScores];
                 this.sessionResults = [...this.sessionData.sessionResults];
                 
+                // Update the UI
                 this.updateUIFromSessionData();
+                
+                // Show sync indicator
+                this.showSyncIndicator();
             }
         } catch (error) {
             console.error('Error in polling check:', error);
+        }
+    }
+    
+    showSyncIndicator() {
+        const statusText = document.querySelector('.status-text');
+        if (statusText) {
+            const originalText = statusText.textContent;
+            statusText.textContent = 'Synced ✓';
+            setTimeout(() => {
+                statusText.textContent = 'Connected';
+            }, 1000);
         }
     }
 
