@@ -185,35 +185,36 @@
             <div id="recording-screen" class="screen">
                 <h2>Score Recording</h2>
                 
-                <div id="current-player-display" style="display: none;">
-                    <!-- Populated by JavaScript -->
-                </div>
-                
                 <div class="recording-controls">
-                    <div class="timer-display" id="timer-display">00:00.00</div>
-                    
-                    <button id="start-recording-btn" class="btn btn-success" disabled>
-                        Start Recording
+                    <button id="load-players-btn" class="btn btn-primary">
+                        🔄 Load Waiting Players
                     </button>
                     
-                    <button id="stop-recording-btn" class="btn btn-danger" style="display: none;">
-                        Stop Recording
+                    <div id="global-timer-display" class="global-timer" style="display: none;">
+                        00:00.00
+                    </div>
+                    
+                    <button id="start-all-btn" class="btn btn-success" style="display: none;">
+                        ▶️ Start All Players
                     </button>
                     
-                    <button id="push-score-btn" class="btn btn-primary" style="display: none;">
-                        📊 Push Score to Database
+                    <button id="push-all-scores-btn" class="btn btn-primary" style="display: none;">
+                        📊 Push All Scores to Database
                     </button>
                 </div>
                 
-                <div id="score-breakdown" style="display: none;">
+                <div id="players-recording-grid" class="players-recording-grid">
                     <!-- Populated by JavaScript -->
                 </div>
                 
                 <div class="info-box">
                     <p><strong>Instructions:</strong></p>
-                    <p>This page automatically loads the newest player who hasn't been recorded yet.</p>
-                    <p>Click "Start Recording" when the player begins, then "Stop Recording" when they finish.</p>
-                    <p>After stopping, click "Push Score to Database" to save their score.</p>
+                    <ol>
+                        <li>Click "Load Waiting Players" to fetch all checked-in players</li>
+                        <li>Click "Start All Players" when everyone is ready</li>
+                        <li>Click each player's "Stop" button when they finish</li>
+                        <li>After all players finish, click "Push All Scores to Database"</li>
+                    </ol>
                 </div>
             </div>
 

@@ -2,9 +2,10 @@
 class ScoreboardApp {
     constructor() {
         this.supabase = null;
-        this.currentPlayer = null;
-        this.startTime = null;
-        this.timer = null;
+        this.currentPlayers = [];
+        this.globalStartTime = null;
+        this.globalTimer = null;
+        this.playerTimers = {};
         this.isRecording = false;
         this.init();
     }
@@ -58,20 +59,20 @@ class ScoreboardApp {
         }
 
         // Recording controls
-        const startBtn = document.getElementById('start-recording-btn');
-        const stopBtn = document.getElementById('stop-recording-btn');
-        const pushScoreBtn = document.getElementById('push-score-btn');
+        const loadPlayersBtn = document.getElementById('load-players-btn');
+        const startAllBtn = document.getElementById('start-all-btn');
+        const pushAllScoresBtn = document.getElementById('push-all-scores-btn');
 
-        if (startBtn) {
-            startBtn.addEventListener('click', () => this.startRecording());
+        if (loadPlayersBtn) {
+            loadPlayersBtn.addEventListener('click', () => this.loadWaitingPlayers());
         }
 
-        if (stopBtn) {
-            stopBtn.addEventListener('click', () => this.stopRecording());
+        if (startAllBtn) {
+            startAllBtn.addEventListener('click', () => this.startAllPlayers());
         }
 
-        if (pushScoreBtn) {
-            pushScoreBtn.addEventListener('click', () => this.pushScoreToDatabase());
+        if (pushAllScoresBtn) {
+            pushAllScoresBtn.addEventListener('click', () => this.pushAllScoresToDatabase());
         }
     }
 
@@ -96,9 +97,7 @@ class ScoreboardApp {
         document.querySelector(`[data-page="${screenName}"]`).classList.add('active');
 
         // Screen-specific actions
-        if (screenName === 'recording') {
-            this.loadNewestPlayer();
-        } else if (screenName === 'results') {
+        if (screenName === 'results') {
             this.loadScores();
             this.startScorePolling();
         }
@@ -172,221 +171,289 @@ class ScoreboardApp {
         });
     }
 
-    async loadNewestPlayer() {
+    async loadWaitingPlayers() {
         if (!this.supabase) {
             alert('Database not available');
             return;
         }
 
         try {
-            console.log('🔄 Loading newest player...');
+            console.log('🔄 Loading waiting players...');
 
             const { data, error } = await this.supabase
                 .from('players')
                 .select('*')
                 .is('bruto_score', null)
-                .order('checkin_time', { ascending: false })
-                .limit(1);
+                .order('checkin_time', { ascending: true });
 
             if (error) {
-                console.error('Error loading player:', error);
-                this.showNoPlayerMessage();
+                console.error('Error loading players:', error);
+                alert('Failed to load players: ' + error.message);
                 return;
             }
 
             if (data && data.length > 0) {
-                this.currentPlayer = data[0];
-                console.log('✅ Loaded player:', this.currentPlayer.player_name);
-                this.displayCurrentPlayer();
+                this.currentPlayers = data;
+                console.log(`✅ Loaded ${data.length} player(s)`);
+                this.displayWaitingPlayers();
             } else {
                 console.log('No players waiting to record');
-                this.showNoPlayerMessage();
+                this.showNoPlayersMessage();
             }
 
         } catch (error) {
-            console.error('Error in loadNewestPlayer:', error);
-            this.showNoPlayerMessage();
+            console.error('Error in loadWaitingPlayers:', error);
+            alert('Failed to load players');
         }
     }
 
-    displayCurrentPlayer() {
-        const playerDisplay = document.getElementById('current-player-display');
-        const startBtn = document.getElementById('start-recording-btn');
+    displayWaitingPlayers() {
+        const grid = document.getElementById('players-recording-grid');
+        const startAllBtn = document.getElementById('start-all-btn');
         
-        if (playerDisplay && this.currentPlayer) {
-            playerDisplay.innerHTML = `
-                <div class="player-info-card">
-                    <h3>${this.currentPlayer.player_name}</h3>
-                    <p>Checked in: ${new Date(this.currentPlayer.checkin_time).toLocaleTimeString()}</p>
-                    <p>Bonus Score: +${this.currentPlayer.bonus_score}s</p>
+        if (!grid) return;
+
+        grid.innerHTML = '';
+
+        this.currentPlayers.forEach((player, index) => {
+            const playerCard = document.createElement('div');
+            playerCard.className = 'player-recording-card';
+            playerCard.dataset.playerId = player.id;
+            playerCard.dataset.playerIndex = index;
+
+            playerCard.innerHTML = `
+                <div class="player-card-header">
+                    <h3>${player.player_name}</h3>
+                    <span class="bonus-badge">+${player.bonus_score}s</span>
                 </div>
+                <div class="player-timer" id="player-timer-${player.id}">00:00.00</div>
+                <button class="btn btn-danger stop-player-btn" data-player-id="${player.id}" disabled>
+                    Stop
+                </button>
+                <div class="player-score-display" id="score-display-${player.id}" style="display: none;"></div>
             `;
-            playerDisplay.style.display = 'block';
-            if (startBtn) startBtn.disabled = false;
+
+            grid.appendChild(playerCard);
+        });
+
+        // Show start all button
+        if (startAllBtn) {
+            startAllBtn.style.display = 'block';
         }
+
+        // Add event listeners to stop buttons
+        document.querySelectorAll('.stop-player-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const playerId = parseInt(e.target.dataset.playerId);
+                this.stopPlayer(playerId);
+            });
+        });
     }
 
-    showNoPlayerMessage() {
-        const playerDisplay = document.getElementById('current-player-display');
-        const startBtn = document.getElementById('start-recording-btn');
+    showNoPlayersMessage() {
+        const grid = document.getElementById('players-recording-grid');
+        const startAllBtn = document.getElementById('start-all-btn');
         
-        if (playerDisplay) {
-            playerDisplay.innerHTML = `
+        if (grid) {
+            grid.innerHTML = `
                 <div class="no-player-message">
                     <p>No players waiting to record</p>
-                    <p>Please check in a player first</p>
+                    <p>Please check in players first</p>
                 </div>
             `;
-            playerDisplay.style.display = 'block';
         }
-        if (startBtn) startBtn.disabled = true;
         
-        // Reset recording UI
-        this.resetRecordingUI();
+        if (startAllBtn) {
+            startAllBtn.style.display = 'none';
+        }
     }
 
-    startRecording() {
-        if (!this.currentPlayer) {
-            alert('No player loaded');
+    startAllPlayers() {
+        if (this.currentPlayers.length === 0) {
+            alert('No players to start');
             return;
         }
 
         this.isRecording = true;
-        this.startTime = Date.now();
+        this.globalStartTime = Date.now();
 
-        // Update UI
-        document.getElementById('start-recording-btn').style.display = 'none';
-        document.getElementById('stop-recording-btn').style.display = 'block';
-        document.getElementById('push-score-btn').style.display = 'none';
+        // Hide start button, show global timer
+        const startAllBtn = document.getElementById('start-all-btn');
+        const globalTimerDisplay = document.getElementById('global-timer-display');
         
-        // Start timer
-        this.timer = setInterval(() => {
-            this.updateTimer();
+        if (startAllBtn) startAllBtn.style.display = 'none';
+        if (globalTimerDisplay) {
+            globalTimerDisplay.style.display = 'block';
+        }
+
+        // Enable all stop buttons
+        document.querySelectorAll('.stop-player-btn').forEach(btn => {
+            btn.disabled = false;
+        });
+
+        // Start global timer
+        this.globalTimer = setInterval(() => {
+            this.updateGlobalTimer();
         }, 100);
 
-        console.log('⏱️ Recording started for', this.currentPlayer.player_name);
+        // Start individual timers for each player
+        this.currentPlayers.forEach(player => {
+            this.playerTimers[player.id] = setInterval(() => {
+                this.updatePlayerTimer(player.id);
+            }, 100);
+        });
+
+        console.log(`⏱️ Started recording for ${this.currentPlayers.length} player(s)`);
     }
 
-    updateTimer() {
-        const elapsed = Date.now() - this.startTime;
+    updateGlobalTimer() {
+        const elapsed = Date.now() - this.globalStartTime;
         const formatted = this.formatTime(elapsed);
-        const timerDisplay = document.getElementById('timer-display');
-        if (timerDisplay) {
-            timerDisplay.textContent = formatted;
-            timerDisplay.classList.add('running');
+        const globalTimerDisplay = document.getElementById('global-timer-display');
+        if (globalTimerDisplay) {
+            globalTimerDisplay.textContent = formatted;
         }
     }
 
-    stopRecording() {
+    updatePlayerTimer(playerId) {
+        const elapsed = Date.now() - this.globalStartTime;
+        const formatted = this.formatTime(elapsed);
+        const timerElement = document.getElementById(`player-timer-${playerId}`);
+        if (timerElement) {
+            timerElement.textContent = formatted;
+            timerElement.classList.add('running');
+        }
+    }
+
+    stopPlayer(playerId) {
         if (!this.isRecording) return;
 
-        this.isRecording = false;
-        const brutoTime = Date.now() - this.startTime;
+        const player = this.currentPlayers.find(p => p.id === playerId);
+        if (!player) return;
 
-        // Stop timer
-        clearInterval(this.timer);
-        this.timer = null;
+        const brutoTime = Date.now() - this.globalStartTime;
+        const nettoTime = brutoTime + (player.bonus_score * 1000);
 
-        // Calculate netto score
-        const nettoTime = brutoTime + (this.currentPlayer.bonus_score * 1000);
+        // Store scores
+        player.bruto_score = brutoTime;
+        player.netto_score = nettoTime;
 
-        // Store scores temporarily
-        this.currentPlayer.bruto_score = brutoTime;
-        this.currentPlayer.netto_score = nettoTime;
+        // Stop this player's timer
+        if (this.playerTimers[playerId]) {
+            clearInterval(this.playerTimers[playerId]);
+            delete this.playerTimers[playerId];
+        }
 
         // Update UI
-        document.getElementById('stop-recording-btn').style.display = 'none';
-        document.getElementById('push-score-btn').style.display = 'block';
-        
-        const timerDisplay = document.getElementById('timer-display');
-        if (timerDisplay) {
-            timerDisplay.classList.remove('running');
+        const timerElement = document.getElementById(`player-timer-${playerId}`);
+        if (timerElement) {
+            timerElement.classList.remove('running');
+            timerElement.classList.add('stopped');
         }
+
+        const stopBtn = document.querySelector(`[data-player-id="${playerId}"]`);
+        if (stopBtn) stopBtn.disabled = true;
 
         // Show score breakdown
-        this.displayScoreBreakdown();
-
-        console.log('⏹️ Recording stopped. Bruto:', this.formatTime(brutoTime), 'Netto:', this.formatTime(nettoTime));
-    }
-
-    displayScoreBreakdown() {
-        const breakdown = document.getElementById('score-breakdown');
-        if (breakdown && this.currentPlayer) {
-            breakdown.innerHTML = `
-                <div class="breakdown-card">
-                    <h4>Score Summary</h4>
-                    <div class="breakdown-row">
-                        <span>Bruto Time:</span>
-                        <span>${this.formatTime(this.currentPlayer.bruto_score)}</span>
-                    </div>
-                    <div class="breakdown-row">
-                        <span>Bonus:</span>
-                        <span>+${this.currentPlayer.bonus_score}s</span>
-                    </div>
-                    <div class="breakdown-row final">
-                        <span>Netto Score:</span>
-                        <span>${this.formatTime(this.currentPlayer.netto_score)}</span>
-                    </div>
+        const scoreDisplay = document.getElementById(`score-display-${playerId}`);
+        if (scoreDisplay) {
+            scoreDisplay.innerHTML = `
+                <div class="mini-breakdown">
+                    <div>Bruto: ${this.formatTime(brutoTime)}</div>
+                    <div>Netto: ${this.formatTime(nettoTime)}</div>
                 </div>
             `;
-            breakdown.style.display = 'block';
+            scoreDisplay.style.display = 'block';
+        }
+
+        console.log(`⏹️ ${player.player_name} stopped at ${this.formatTime(brutoTime)}`);
+
+        // Check if all players are done
+        const allDone = this.currentPlayers.every(p => p.bruto_score !== null && p.bruto_score !== undefined);
+        
+        if (allDone) {
+            this.allPlayersFinished();
         }
     }
 
-    async pushScoreToDatabase() {
-        if (!this.supabase || !this.currentPlayer) {
-            alert('Cannot push score');
+    allPlayersFinished() {
+        console.log('🏁 All players finished!');
+        
+        // Stop global timer
+        if (this.globalTimer) {
+            clearInterval(this.globalTimer);
+            this.globalTimer = null;
+        }
+
+        this.isRecording = false;
+
+        // Show push all scores button
+        const pushAllBtn = document.getElementById('push-all-scores-btn');
+        if (pushAllBtn) {
+            pushAllBtn.style.display = 'block';
+        }
+    }
+
+    async pushAllScoresToDatabase() {
+        if (!this.supabase || this.currentPlayers.length === 0) {
+            alert('No scores to push');
             return;
         }
 
         try {
-            console.log('📤 Pushing score to database...');
+            console.log('📤 Pushing all scores to database...');
 
-            const { error } = await this.supabase
-                .from('players')
-                .update({
-                    bruto_score: this.currentPlayer.bruto_score,
-                    netto_score: this.currentPlayer.netto_score
-                })
-                .eq('id', this.currentPlayer.id);
+            // Update each player
+            const updates = this.currentPlayers.map(player => 
+                this.supabase
+                    .from('players')
+                    .update({
+                        bruto_score: player.bruto_score,
+                        netto_score: player.netto_score
+                    })
+                    .eq('id', player.id)
+            );
 
-            if (error) {
-                console.error('Error pushing score:', error);
-                alert('Failed to push score: ' + error.message);
+            const results = await Promise.all(updates);
+
+            // Check for errors
+            const errors = results.filter(r => r.error);
+            if (errors.length > 0) {
+                console.error('Some scores failed to save:', errors);
+                alert(`${errors.length} score(s) failed to save. Check console.`);
                 return;
             }
 
-            console.log('✅ Score pushed successfully');
-            alert('Score saved successfully!');
+            console.log('✅ All scores pushed successfully');
+            alert(`${this.currentPlayers.length} score(s) saved successfully!`);
 
-            // Reset for next player
-            this.resetRecordingUI();
-            this.currentPlayer = null;
-
-            // Reload newest player
-            await this.loadNewestPlayer();
+            // Reset recording page
+            this.resetRecordingPage();
 
         } catch (error) {
-            console.error('Error in pushScoreToDatabase:', error);
-            alert('Failed to push score');
+            console.error('Error in pushAllScoresToDatabase:', error);
+            alert('Failed to push scores');
         }
     }
 
-    resetRecordingUI() {
-        document.getElementById('start-recording-btn').style.display = 'block';
-        document.getElementById('stop-recording-btn').style.display = 'none';
-        document.getElementById('push-score-btn').style.display = 'none';
-        
-        const timerDisplay = document.getElementById('timer-display');
-        if (timerDisplay) {
-            timerDisplay.textContent = '00:00.00';
-            timerDisplay.classList.remove('running');
-        }
+    resetRecordingPage() {
+        this.currentPlayers = [];
+        this.playerTimers = {};
+        this.globalStartTime = null;
+        this.isRecording = false;
 
-        const breakdown = document.getElementById('score-breakdown');
-        if (breakdown) {
-            breakdown.style.display = 'none';
+        const grid = document.getElementById('players-recording-grid');
+        const startAllBtn = document.getElementById('start-all-btn');
+        const globalTimerDisplay = document.getElementById('global-timer-display');
+        const pushAllBtn = document.getElementById('push-all-scores-btn');
+
+        if (grid) grid.innerHTML = '';
+        if (startAllBtn) startAllBtn.style.display = 'none';
+        if (globalTimerDisplay) {
+            globalTimerDisplay.style.display = 'none';
+            globalTimerDisplay.textContent = '00:00.00';
         }
+        if (pushAllBtn) pushAllBtn.style.display = 'none';
     }
 
     async loadScores() {
