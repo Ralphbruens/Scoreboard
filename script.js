@@ -45,19 +45,16 @@ class ScoreboardApp {
             btn.addEventListener('click', (e) => this.switchScreen(e.target.dataset.page));
         });
 
-        // Check-in
-        const checkinInput = document.getElementById('player-name-input');
-        const checkinBtn = document.getElementById('checkin-btn');
-        const bonusInput = document.getElementById('bonus-score-input');
+        // Multi-player check-in
+        const checkinAllBtn = document.getElementById('checkin-all-btn');
+        const clearAllBtn = document.getElementById('clear-all-btn');
 
-        if (checkinInput) {
-            checkinInput.addEventListener('input', (e) => {
-                checkinBtn.disabled = e.target.value.trim().length === 0;
-            });
+        if (checkinAllBtn) {
+            checkinAllBtn.addEventListener('click', () => this.checkInAllPlayers());
         }
 
-        if (checkinBtn) {
-            checkinBtn.addEventListener('click', () => this.checkInPlayer());
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener('click', () => this.clearAllCheckInFields());
         }
 
         // Recording controls
@@ -107,56 +104,72 @@ class ScoreboardApp {
         }
     }
 
-    async checkInPlayer() {
+    async checkInAllPlayers() {
         if (!this.supabase) {
             alert('Database not available. Please check your connection.');
             return;
         }
 
-        const nameInput = document.getElementById('player-name-input');
-        const bonusInput = document.getElementById('bonus-score-input');
-        const playerName = nameInput.value.trim();
-        const bonusScore = parseInt(bonusInput.value) || 0;
-
-        if (!playerName) {
-            alert('Please enter a player name');
-            return;
-        }
-
-        try {
-            console.log('📝 Checking in player:', playerName);
-
-            const { data, error } = await this.supabase
-                .from('players')
-                .insert([{
-                    player_name: playerName,
+        // Collect all filled player data
+        const playerInputs = document.querySelectorAll('.player-name-input');
+        const bonusInputs = document.querySelectorAll('.bonus-input-field');
+        
+        const playersToCheckIn = [];
+        
+        for (let i = 0; i < playerInputs.length; i++) {
+            const name = playerInputs[i].value.trim();
+            if (name) {
+                const bonusScore = parseInt(bonusInputs[i].value) || 0;
+                playersToCheckIn.push({
+                    player_name: name,
                     checkin_time: new Date().toISOString(),
                     bonus_score: bonusScore,
                     bruto_score: null,
                     netto_score: null
-                }])
+                });
+            }
+        }
+
+        if (playersToCheckIn.length === 0) {
+            alert('Please enter at least one player name');
+            return;
+        }
+
+        try {
+            console.log(`📝 Checking in ${playersToCheckIn.length} player(s)...`);
+
+            const { data, error } = await this.supabase
+                .from('players')
+                .insert(playersToCheckIn)
                 .select();
 
             if (error) {
-                console.error('Error checking in player:', error);
-                alert('Failed to check in player: ' + error.message);
+                console.error('Error checking in players:', error);
+                alert('Failed to check in players: ' + error.message);
                 return;
             }
 
-            console.log('✅ Player checked in successfully');
+            console.log('✅ Players checked in successfully:', data);
             
-            // Clear form
-            nameInput.value = '';
-            bonusInput.value = '0';
-            document.getElementById('checkin-btn').disabled = true;
+            // Clear all fields
+            this.clearAllCheckInFields();
 
             // Show success message
-            this.showSuccessMessage('Player checked in successfully!');
+            this.showSuccessMessage(`${playersToCheckIn.length} player(s) checked in successfully!`);
 
         } catch (error) {
-            console.error('Error in checkInPlayer:', error);
-            alert('Failed to check in player');
+            console.error('Error in checkInAllPlayers:', error);
+            alert('Failed to check in players');
         }
+    }
+
+    clearAllCheckInFields() {
+        document.querySelectorAll('.player-name-input').forEach(input => {
+            input.value = '';
+        });
+        document.querySelectorAll('.bonus-input-field').forEach(input => {
+            input.value = '0';
+        });
     }
 
     async loadNewestPlayer() {
