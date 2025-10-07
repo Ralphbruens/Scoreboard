@@ -82,23 +82,24 @@ class ScoreboardApp {
 
     async loadOrCreateSession() {
         if (!this.supabase) return;
-
+    
         try {
-            // Try to load existing session
+            // Try to load existing session by room code
             const { data, error } = await this.supabase
                 .from('sessions')
                 .select('*')
-                .eq('id', this.sessionData.id)
+                .eq('room_code', this.sessionData.roomCode)
                 .single();
-
+    
             if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
                 console.error('Error loading session:', error);
                 return;
             }
-
+    
             if (data) {
                 // Load existing session data
                 this.sessionData = { ...data.data };
+                this.sessionData.id = data.id; // Keep the database ID
                 this.players = [...this.sessionData.players];
                 this.bonusScores = [...this.sessionData.bonusScores];
                 this.isRecording = this.sessionData.isRecording;
@@ -139,23 +140,30 @@ class ScoreboardApp {
 
     setupRealtimeSubscription() {
         if (!this.supabase) return;
-
+    
+        console.log('Setting up real-time subscription for room:', this.sessionData.roomCode);
+    
         this.supabase
             .channel('sessions')
             .on('postgres_changes', 
                 { 
-                    event: 'UPDATE', 
+                    event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
                     schema: 'public', 
                     table: 'sessions',
-                    filter: `id=eq.${this.sessionData.id}`
+                    filter: `room_code=eq.${this.sessionData.roomCode}`
                 }, 
                 (payload) => {
-                    if (payload.new.data.id !== this.sessionData.id) return;
+                    console.log('Real-time update received:', payload);
+                    
+                    // Check if this update is for our room
+                    if (payload.new.room_code !== this.sessionData.roomCode) return;
                     
                     const newSessionData = payload.new.data;
                     
                     // Don't update if this is our own change (prevent loops)
                     if (newSessionData.lastUpdated <= this.sessionData.lastUpdated) return;
+                    
+                    console.log('Applying real-time update:', newSessionData);
                     
                     this.sessionData = newSessionData;
                     this.players = [...this.sessionData.players];
@@ -166,7 +174,9 @@ class ScoreboardApp {
                     
                     this.updateUIFromSessionData();
                 })
-            .subscribe();
+            .subscribe((status) => {
+                console.log('Realtime subscription status:', status);
+            });
     }
 
     updateUIFromSessionData() {
