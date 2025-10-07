@@ -109,13 +109,11 @@ class ScoreboardApp {
             return;
         }
 
-        // Check if random bonus is enabled
-        const randomBonusCheckbox = document.getElementById('random-bonus-checkbox');
-        const useRandomBonus = randomBonusCheckbox ? randomBonusCheckbox.checked : false;
-
         // Collect all filled player data
         const playerInputs = document.querySelectorAll('.player-name-input');
         const bonusInputs = document.querySelectorAll('.bonus-input-field');
+        const randomBonusChecks = document.querySelectorAll('.random-bonus-check');
+        const noBonusChecks = document.querySelectorAll('.no-bonus-check');
         
         const playersToCheckIn = [];
         
@@ -123,10 +121,17 @@ class ScoreboardApp {
             const name = playerInputs[i].value.trim();
             if (name) {
                 let bonusScore;
-                if (useRandomBonus) {
-                    // Generate random bonus between 5 and 20 (inclusive)
-                    bonusScore = Math.floor(Math.random() * 16) + 5;
-                } else {
+                
+                // Check if "No Bonus" is checked for this player
+                if (noBonusChecks[i].checked) {
+                    bonusScore = 0;
+                }
+                // Check if "Random Bonus" is checked for this player
+                else if (randomBonusChecks[i].checked) {
+                    bonusScore = Math.floor(Math.random() * 16) + 5; // 5-20
+                }
+                // Use manual bonus input
+                else {
                     bonusScore = parseInt(bonusInputs[i].value) || 0;
                 }
                 
@@ -147,9 +152,7 @@ class ScoreboardApp {
 
         try {
             console.log(`📝 Checking in ${playersToCheckIn.length} player(s)...`);
-            if (useRandomBonus) {
-                console.log('🎲 Random bonus scores assigned:', playersToCheckIn.map(p => `${p.player_name}: ${p.bonus_score}s`));
-            }
+            console.log('Bonus scores:', playersToCheckIn.map(p => `${p.player_name}: ${p.bonus_score}s`));
 
             const { data, error } = await this.supabase
                 .from('players')
@@ -168,8 +171,7 @@ class ScoreboardApp {
             this.clearAllCheckInFields();
 
             // Show success message
-            const bonusInfo = useRandomBonus ? ' (with random bonuses)' : '';
-            this.showSuccessMessage(`${playersToCheckIn.length} player(s) checked in successfully${bonusInfo}!`);
+            this.showSuccessMessage(`${playersToCheckIn.length} player(s) checked in successfully!`);
 
         } catch (error) {
             console.error('Error in checkInAllPlayers:', error);
@@ -183,6 +185,12 @@ class ScoreboardApp {
         });
         document.querySelectorAll('.bonus-input-field').forEach(input => {
             input.value = '0';
+        });
+        document.querySelectorAll('.random-bonus-check').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        document.querySelectorAll('.no-bonus-check').forEach(checkbox => {
+            checkbox.checked = false;
         });
     }
 
@@ -270,7 +278,7 @@ class ScoreboardApp {
             playerCard.innerHTML = `
                 <div class="player-card-header">
                     <h3>${player.player_name}</h3>
-                    <span class="bonus-badge">-${player.bonus_score}s</span>
+                    <span class="bonus-badge">+${player.bonus_score}s</span>
                 </div>
                 <div class="player-timer" id="player-timer-${player.id}">120.00</div>
                 <button class="btn btn-danger stop-player-btn" data-player-id="${player.id}" disabled>
@@ -322,7 +330,7 @@ class ScoreboardApp {
 
         this.isRecording = true;
         this.globalStartTime = Date.now();
-
+        
         // Hide start button, show global timer
         const startAllBtn = document.getElementById('start-all-btn');
         const globalTimerDisplay = document.getElementById('global-timer-display');
@@ -336,7 +344,7 @@ class ScoreboardApp {
         document.querySelectorAll('.stop-player-btn').forEach(btn => {
             btn.disabled = false;
         });
-
+        
         // Start global timer
         this.globalTimer = setInterval(() => {
             this.updateGlobalTimer();
@@ -346,7 +354,7 @@ class ScoreboardApp {
         this.currentPlayers.forEach(player => {
             this.playerTimers[player.id] = setInterval(() => {
                 this.updatePlayerTimer(player.id);
-            }, 100);
+                }, 100);
         });
 
         console.log(`⏱️ Started recording for ${this.currentPlayers.length} player(s)`);
@@ -413,7 +421,7 @@ class ScoreboardApp {
         const elapsed = Date.now() - this.globalStartTime;
         const remainingMs = Math.max(0, 120000 - elapsed);
         const brutoScore = Math.floor(remainingMs / 1000); // Seconds remaining
-        const nettoScore = Math.max(0, brutoScore - player.bonus_score); // Subtract bonus penalty
+        const nettoScore = brutoScore + player.bonus_score; // Add bonus score
 
         // Store scores (in seconds for bruto/netto, but we'll store milliseconds for compatibility)
         player.bruto_score = brutoScore * 1000; // Store as milliseconds for compatibility
@@ -443,7 +451,7 @@ class ScoreboardApp {
             scoreDisplay.innerHTML = `
                 <div class="mini-breakdown">
                     <div>⏱️ Bruto: ${brutoScore}s</div>
-                    <div>⚡ Bonus: -${player.bonus_score}s</div>
+                    <div>⚡ Bonus: +${player.bonus_score}s</div>
                     <div class="final-score">🏆 Netto: ${nettoScore}s</div>
                 </div>
             `;
@@ -599,7 +607,7 @@ class ScoreboardApp {
                     <div class="player-details">
                         <div class="player-name">${player.player_name}</div>
                         <div class="score-details">
-                            ${brutoSeconds}s - ${player.bonus_score}s = ${nettoSeconds}s
+                            ${brutoSeconds}s + ${player.bonus_score}s = ${nettoSeconds}s
                         </div>
                         <div class="checkin-date">${new Date(player.checkin_time).toLocaleString()}</div>
                     </div>
