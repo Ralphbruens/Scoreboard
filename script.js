@@ -275,7 +275,11 @@ class ScoreboardApp {
             playerCard.dataset.playerId = player.id;
             playerCard.dataset.playerIndex = index;
 
+            // Determine field number (1-5)
+            const fieldNumber = (index % 5) + 1;
+
             playerCard.innerHTML = `
+                <div class="field-label-recording">Field ${fieldNumber}</div>
                 <div class="player-card-header">
                     <h3>${player.player_name}</h3>
                     <span class="bonus-badge">+${player.bonus_score}s</span>
