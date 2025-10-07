@@ -32,10 +32,11 @@ class ScoreboardApp {
 
     async init() {
         this.setupEventListeners();
-        this.loadLeaderboards();
         this.updateBonusDisplay();
         await this.initializeSupabase();
         this.displayRoomCode();
+        // Load leaderboards from Supabase (fallback to localStorage if not available)
+        await this.loadLeaderboardsFromSupabase();
         // No automatic polling on init - only on results screen
     }
 
@@ -152,7 +153,7 @@ class ScoreboardApp {
             alert('Database not available');
             return;
         }
-
+    
         try {
             console.log('🔄 Manually refreshing players from database...');
             
@@ -204,7 +205,7 @@ class ScoreboardApp {
     }
 
     // Start automatic polling for Results screen only
-    startResultsPolling() {
+    async startResultsPolling() {
         // Stop any existing polling
         if (this.pollingInterval) {
             clearInterval(this.pollingInterval);
@@ -212,11 +213,14 @@ class ScoreboardApp {
 
         console.log('📊 Starting results polling (every 2000ms)...');
         
+        // Load leaderboards immediately when entering results screen
+        await this.loadLeaderboardsFromSupabase();
+        
         this.pollingInterval = setInterval(async () => {
             await this.checkForNewResults();
         }, 2000);
         
-        // Also check immediately
+        // Also check for new session results immediately
         this.checkForNewResults();
     }
 
@@ -252,6 +256,9 @@ class ScoreboardApp {
                 
                 // Update local state
                 this.sessionResults = [...this.sessionData.sessionResults];
+                
+                // Reload leaderboards from database
+                await this.loadLeaderboardsFromSupabase();
                 
                 // Update Results screen
                 this.updateResultsScreen();
@@ -585,7 +592,7 @@ class ScoreboardApp {
         await this.saveSessionData();
 
         // Update leaderboards
-        this.updateLeaderboards();
+        await this.updateLeaderboards();
         
         alert('✅ Scores uploaded to scoreboard successfully!');
         
@@ -593,43 +600,118 @@ class ScoreboardApp {
         this.switchScreen('results');
     }
 
-    updateLeaderboards() {
-        // Add to today's leaderboard
-        this.sessionResults.forEach(result => {
-            this.todayLeaderboard.push({
-                ...result,
-                date: new Date().toISOString().split('T')[0],
-                timestamp: Date.now()
-            });
-        });
-
-        // Sort today's leaderboard
-        this.todayLeaderboard.sort((a, b) => a.nettoTime - b.nettoTime);
-
-        // Keep only top 10
-        this.todayLeaderboard = this.todayLeaderboard.slice(0, 10);
-
-        // Update weekly leaderboard (last 7 days)
-        const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-        this.weeklyLeaderboard = this.todayLeaderboard
-            .filter(entry => entry.timestamp >= weekAgo)
-            .sort((a, b) => a.nettoTime - b.nettoTime)
-            .slice(0, 10);
-
-        // Save to localStorage
+    async updateLeaderboards() {
+        // Save to Supabase leaderboards table
+        await this.saveLeaderboardsToSupabase();
+        
+        // Also save to localStorage as backup
         this.saveLeaderboards();
+    }
+
+    async saveLeaderboardsToSupabase() {
+        if (!this.supabase) {
+            console.log('Supabase not available, cannot save leaderboards');
+            return;
+        }
+
+        try {
+            // Save each session result to the leaderboards table
+            const leaderboardEntries = this.sessionResults.map(result => ({
+                player_name: result.name,
+                field_number: result.fieldNumber,
+                bruto_time: result.brutoTime,
+                bonus_score: result.bonusScore,
+                netto_time: result.nettoTime,
+                session_date: new Date().toISOString().split('T')[0]
+            }));
+
+            const { error } = await this.supabase
+                .from('leaderboards')
+                .insert(leaderboardEntries);
+
+            if (error) {
+                console.error('Error saving to leaderboards table:', error);
+            } else {
+                console.log('✅ Leaderboards saved to database');
+            }
+        } catch (error) {
+            console.error('Error in saveLeaderboardsToSupabase:', error);
+        }
+    }
+
+    async loadLeaderboardsFromSupabase() {
+        if (!this.supabase) {
+            console.log('Supabase not available, loading from localStorage only');
+            this.loadLeaderboards();
+            return;
+        }
+
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const weekAgo = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+
+            // Get today's leaderboard
+            const { data: todayData, error: todayError } = await this.supabase
+                .from('leaderboards')
+                .select('*')
+                .eq('session_date', today)
+                .order('netto_time', { ascending: true })
+                .limit(10);
+
+            if (todayError) {
+                console.error('Error loading today\'s leaderboard:', todayError);
+            } else if (todayData) {
+                this.todayLeaderboard = todayData.map(entry => ({
+                    name: entry.player_name,
+                    fieldNumber: entry.field_number,
+                    brutoTime: entry.bruto_time,
+                    bonusScore: entry.bonus_score,
+                    nettoTime: entry.netto_time,
+                    date: entry.session_date,
+                    timestamp: new Date(entry.created_at).getTime()
+                }));
+            }
+
+            // Get weekly leaderboard
+            const { data: weeklyData, error: weeklyError } = await this.supabase
+                .from('leaderboards')
+                .select('*')
+                .gte('session_date', weekAgo)
+                .order('netto_time', { ascending: true })
+                .limit(10);
+
+            if (weeklyError) {
+                console.error('Error loading weekly leaderboard:', weeklyError);
+            } else if (weeklyData) {
+                this.weeklyLeaderboard = weeklyData.map(entry => ({
+                    name: entry.player_name,
+                    fieldNumber: entry.field_number,
+                    brutoTime: entry.bruto_time,
+                    bonusScore: entry.bonus_score,
+                    nettoTime: entry.netto_time,
+                    date: entry.session_date,
+                    timestamp: new Date(entry.created_at).getTime()
+                }));
+            }
+
+            console.log('✅ Leaderboards loaded from database');
+        } catch (error) {
+            console.error('Error in loadLeaderboardsFromSupabase:', error);
+            // Fallback to localStorage
+            this.loadLeaderboards();
+        }
     }
 
     updateResultsScreen() {
         // Update current session results
         const currentResultsContainer = document.getElementById('current-results');
         if (currentResultsContainer) {
-            currentResultsContainer.innerHTML = '';
+        currentResultsContainer.innerHTML = '';
 
-            this.sessionResults.forEach((result, index) => {
-                const resultCard = this.createResultCard(result, index + 1);
-                currentResultsContainer.appendChild(resultCard);
-            });
+        this.sessionResults.forEach((result, index) => {
+            const resultCard = this.createResultCard(result, index + 1);
+            currentResultsContainer.appendChild(resultCard);
+        });
         }
 
         // Update today's leaderboard
