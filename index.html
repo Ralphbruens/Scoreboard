@@ -11,208 +11,103 @@
     <div class="container">
         <header class="header">
             <h1>Scoreboard App</h1>
-            <div class="room-info">
-                <div class="room-code">
-                    <span class="room-label">Room Code:</span>
-                    <span class="room-value" id="room-code">Loading...</span>
-                </div>
-                <div class="connection-status" id="connection-status">
-                    <span class="status-indicator offline"></span>
-                    <span class="status-text">Connecting...</span>
-                </div>
+            <div class="connection-status" id="connection-status">
+                <span class="status-indicator offline"></span>
+                <span class="status-text">Connecting...</span>
             </div>
             <nav class="nav">
-                <button class="nav-btn active" data-page="login">Check-in</button>
+                <button class="nav-btn active" data-page="checkin">Check-in</button>
                 <button class="nav-btn" data-page="recording">Recording</button>
-                <button class="nav-btn" data-page="results">Results</button>
+                <button class="nav-btn" data-page="results">Scoreboard</button>
             </nav>
         </header>
 
         <main class="main-content">
-            <!-- Login/Check-in Screen -->
-            <div id="login-screen" class="screen active">
+            <!-- Check-in Screen -->
+            <div id="checkin-screen" class="screen active">
                 <h2>Player Check-in</h2>
-                <div class="player-grid">
-                    <div class="player-slot" data-slot="0">
-                        <div class="slot-header">
-                            <span class="field-number">Field 1</span>
-                            <span class="bonus-score">+5s</span>
-                        </div>
-                        <div class="player-info">
-                            <input type="text" placeholder="Enter player name" class="player-input">
-                            <button class="checkin-btn" disabled>Check In</button>
-                        </div>
-                        <div class="player-status">Available</div>
+                <div class="checkin-form">
+                    <div class="form-group">
+                        <label for="player-name-input">Player Name</label>
+                        <input 
+                            type="text" 
+                            id="player-name-input" 
+                            placeholder="Enter player name"
+                            class="form-input"
+                        >
                     </div>
                     
-                    <div class="player-slot" data-slot="1">
-                        <div class="slot-header">
-                            <span class="field-number">Field 2</span>
-                            <span class="bonus-score">+10s</span>
-                        </div>
-                        <div class="player-info">
-                            <input type="text" placeholder="Enter player name" class="player-input">
-                            <button class="checkin-btn" disabled>Check In</button>
-                        </div>
-                        <div class="player-status">Available</div>
+                    <div class="form-group">
+                        <label for="bonus-score-input">Bonus Score (seconds)</label>
+                        <input 
+                            type="number" 
+                            id="bonus-score-input" 
+                            value="0"
+                            min="0"
+                            max="100"
+                            class="form-input"
+                        >
                     </div>
                     
-                    <div class="player-slot" data-slot="2">
-                        <div class="slot-header">
-                            <span class="field-number">Field 3</span>
-                            <span class="bonus-score">+15s</span>
-                        </div>
-                        <div class="player-info">
-                            <input type="text" placeholder="Enter player name" class="player-input">
-                            <button class="checkin-btn" disabled>Check In</button>
-                        </div>
-                        <div class="player-status">Available</div>
-                    </div>
-                    
-                    <div class="player-slot" data-slot="3">
-                        <div class="slot-header">
-                            <span class="field-number">Field 4</span>
-                            <span class="bonus-score">+20s</span>
-                        </div>
-                        <div class="player-info">
-                            <input type="text" placeholder="Enter player name" class="player-input">
-                            <button class="checkin-btn" disabled>Check In</button>
-                        </div>
-                        <div class="player-status">Available</div>
-                    </div>
-                    
-                    <div class="player-slot" data-slot="4">
-                        <div class="slot-header">
-                            <span class="field-number">Field 5</span>
-                            <span class="bonus-score">+25s</span>
-                        </div>
-                        <div class="player-info">
-                            <input type="text" placeholder="Enter player name" class="player-input">
-                            <button class="checkin-btn" disabled>Check In</button>
-                        </div>
-                        <div class="player-status">Available</div>
-                    </div>
+                    <button id="checkin-btn" class="btn btn-primary" disabled>
+                        Check In Player
+                    </button>
                 </div>
                 
-                <div class="bonus-settings">
-                    <h3>Bonus Score Settings</h3>
-                    <div class="bonus-grid">
-                        <div class="bonus-item">
-                            <label>Field 1:</label>
-                            <input type="number" value="5" min="0" max="100" class="bonus-input" data-field="1">
-                            <span>seconds</span>
-                        </div>
-                        <div class="bonus-item">
-                            <label>Field 2:</label>
-                            <input type="number" value="10" min="0" max="100" class="bonus-input" data-field="2">
-                            <span>seconds</span>
-                        </div>
-                        <div class="bonus-item">
-                            <label>Field 3:</label>
-                            <input type="number" value="15" min="0" max="100" class="bonus-input" data-field="3">
-                            <span>seconds</span>
-                        </div>
-                        <div class="bonus-item">
-                            <label>Field 4:</label>
-                            <input type="number" value="20" min="0" max="100" class="bonus-input" data-field="4">
-                            <span>seconds</span>
-                        </div>
-                        <div class="bonus-item">
-                            <label>Field 5:</label>
-                            <input type="number" value="25" min="0" max="100" class="bonus-input" data-field="5">
-                            <span>seconds</span>
-                        </div>
-                    </div>
+                <div class="info-box">
+                    <h3>How it works:</h3>
+                    <ol>
+                        <li>Enter the player's name</li>
+                        <li>Set their bonus score (optional)</li>
+                        <li>Click "Check In Player"</li>
+                        <li>Go to Recording tab to record their time</li>
+                    </ol>
                 </div>
             </div>
 
-            <!-- Score Recording Screen -->
+            <!-- Recording Screen -->
             <div id="recording-screen" class="screen">
                 <h2>Score Recording</h2>
-                <div class="recording-controls">
-                    <button id="refresh-players-btn" class="refresh-btn">🔄 Refresh Players</button>
-                    <button id="start-all-btn" class="start-btn">Start All Players</button>
-                    <div class="timer-display" id="global-timer">00:00:00</div>
-                    <button id="update-scoreboard-btn" class="update-scoreboard-btn" style="display: none;">📊 Update Score to Scoreboard</button>
-                </div>
-                <div id="last-update-info" class="last-update-info" style="display: none;"></div>
                 
-                <div class="players-recording">
-                    <div class="player-recording" data-slot="0">
-                        <div class="player-card">
-                            <h3 class="player-name">Player Name</h3>
-                            <div class="field-info">Field 1 (+5s)</div>
-                            <div class="timer" id="timer-0">00:00:00</div>
-                            <button class="stop-btn" disabled>Stop</button>
-                        </div>
-                    </div>
+                <div id="current-player-display" style="display: none;">
+                    <!-- Populated by JavaScript -->
+                </div>
+                
+                <div class="recording-controls">
+                    <div class="timer-display" id="timer-display">00:00.00</div>
                     
-                    <div class="player-recording" data-slot="1">
-                        <div class="player-card">
-                            <h3 class="player-name">Player Name</h3>
-                            <div class="field-info">Field 2 (+10s)</div>
-                            <div class="timer" id="timer-1">00:00:00</div>
-                            <button class="stop-btn" disabled>Stop</button>
-                        </div>
-                    </div>
+                    <button id="start-recording-btn" class="btn btn-success" disabled>
+                        Start Recording
+                    </button>
                     
-                    <div class="player-recording" data-slot="2">
-                        <div class="player-card">
-                            <h3 class="player-name">Player Name</h3>
-                            <div class="field-info">Field 3 (+15s)</div>
-                            <div class="timer" id="timer-2">00:00:00</div>
-                            <button class="stop-btn" disabled>Stop</button>
-                        </div>
-                    </div>
+                    <button id="stop-recording-btn" class="btn btn-danger" style="display: none;">
+                        Stop Recording
+                    </button>
                     
-                    <div class="player-recording" data-slot="3">
-                        <div class="player-card">
-                            <h3 class="player-name">Player Name</h3>
-                            <div class="field-info">Field 4 (+20s)</div>
-                            <div class="timer" id="timer-3">00:00:00</div>
-                            <button class="stop-btn" disabled>Stop</button>
-                        </div>
-                    </div>
-                    
-                    <div class="player-recording" data-slot="4">
-                        <div class="player-card">
-                            <h3 class="player-name">Player Name</h3>
-                            <div class="field-info">Field 5 (+25s)</div>
-                            <div class="timer" id="timer-4">00:00:00</div>
-                            <button class="stop-btn" disabled>Stop</button>
-                        </div>
-                    </div>
+                    <button id="push-score-btn" class="btn btn-primary" style="display: none;">
+                        📊 Push Score to Database
+                    </button>
+                </div>
+                
+                <div id="score-breakdown" style="display: none;">
+                    <!-- Populated by JavaScript -->
+                </div>
+                
+                <div class="info-box">
+                    <p><strong>Instructions:</strong></p>
+                    <p>This page automatically loads the newest player who hasn't been recorded yet.</p>
+                    <p>Click "Start Recording" when the player begins, then "Stop Recording" when they finish.</p>
+                    <p>After stopping, click "Push Score to Database" to save their score.</p>
                 </div>
             </div>
 
-            <!-- Results Screen -->
+            <!-- Results/Scoreboard Screen -->
             <div id="results-screen" class="screen">
-                <h2>Final Results</h2>
+                <h2>Scoreboard</h2>
+                <p class="auto-refresh-note">🔄 Auto-refreshing every 2 seconds</p>
                 
-                <div class="leaderboard">
-                    <h3>Today's Leaderboard</h3>
-                    <div class="leaderboard-list" id="today-leaderboard">
-                        <!-- Dynamic content -->
-                    </div>
-                </div>
-                
-                <div class="current-results">
-                    <h3>Current Session Results</h3>
-                    <div class="results-grid" id="current-results">
-                        <!-- Dynamic content -->
-                    </div>
-                </div>
-                
-                <div class="weekly-leaderboard">
-                    <h3>Weekly Leaderboard</h3>
-                    <div class="leaderboard-list" id="weekly-leaderboard">
-                        <!-- Dynamic content -->
-                    </div>
-                </div>
-                
-                <div class="action-buttons">
-                    <button id="reset-session" class="action-btn">New Session</button>
-                    <button id="export-results" class="action-btn">Export Results</button>
+                <div id="scores-list" class="scores-container">
+                    <!-- Populated by JavaScript -->
                 </div>
             </div>
         </main>
