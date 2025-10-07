@@ -567,26 +567,96 @@ class ScoreboardApp {
         try {
             console.log('📊 Loading scores...');
 
-            const { data, error } = await this.supabase
-                .from('players')
-                .select('*')
-                .not('netto_score', 'is', null)
-                .order('netto_score', { ascending: false }); // Higher score is better now
+            // Load last 5 players (most recent)
+            await this.loadRecentScores();
 
-            if (error) {
-                console.error('Error loading scores:', error);
-                return;
-            }
+            // Load today's top 10
+            await this.loadTodayTopScores();
 
-            this.displayScores(data || []);
+            // Load weekly top 10
+            await this.loadWeeklyTopScores();
 
         } catch (error) {
             console.error('Error in loadScores:', error);
         }
     }
 
-    displayScores(scores) {
-        const scoresContainer = document.getElementById('scores-list');
+    async loadRecentScores() {
+        try {
+            const { data, error } = await this.supabase
+                .from('players')
+                .select('*')
+                .not('netto_score', 'is', null)
+                .order('created_at', { ascending: false })
+                .limit(5);
+
+            if (error) {
+                console.error('Error loading recent scores:', error);
+                return;
+            }
+
+            this.displayScores(data || [], 'recent-scores-list', false);
+
+        } catch (error) {
+            console.error('Error in loadRecentScores:', error);
+        }
+    }
+
+    async loadTodayTopScores() {
+        try {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayISO = today.toISOString();
+
+            const { data, error } = await this.supabase
+                .from('players')
+                .select('*')
+                .not('netto_score', 'is', null)
+                .gte('checkin_time', todayISO)
+                .order('netto_score', { ascending: false })
+                .limit(10);
+
+            if (error) {
+                console.error('Error loading today\'s scores:', error);
+                return;
+            }
+
+            this.displayScores(data || [], 'today-scores-list', true);
+
+        } catch (error) {
+            console.error('Error in loadTodayTopScores:', error);
+        }
+    }
+
+    async loadWeeklyTopScores() {
+        try {
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            weekAgo.setHours(0, 0, 0, 0);
+            const weekAgoISO = weekAgo.toISOString();
+
+            const { data, error } = await this.supabase
+                .from('players')
+                .select('*')
+                .not('netto_score', 'is', null)
+                .gte('checkin_time', weekAgoISO)
+                .order('netto_score', { ascending: false })
+                .limit(10);
+
+            if (error) {
+                console.error('Error loading weekly scores:', error);
+                return;
+            }
+
+            this.displayScores(data || [], 'weekly-scores-list', true);
+
+        } catch (error) {
+            console.error('Error in loadWeeklyTopScores:', error);
+        }
+    }
+
+    displayScores(scores, containerId, showRanking = true) {
+        const scoresContainer = document.getElementById(containerId);
         if (!scoresContainer) return;
 
         if (scores.length === 0) {
@@ -594,15 +664,15 @@ class ScoreboardApp {
             return;
         }
 
-        // Sort by netto_score DESCENDING (higher is better now)
-        const sortedScores = [...scores].sort((a, b) => b.netto_score - a.netto_score);
-
-        scoresContainer.innerHTML = sortedScores.map((player, index) => {
+        scoresContainer.innerHTML = scores.map((player, index) => {
             const brutoSeconds = Math.floor(player.bruto_score / 1000);
             const nettoSeconds = Math.floor(player.netto_score / 1000);
             
+            // Show podium styling only for top 3 in ranked lists
+            const podiumClass = (showRanking && index < 3) ? 'podium-' + (index + 1) : '';
+            
             return `
-                <div class="score-card ${index < 3 ? 'podium-' + (index + 1) : ''}">
+                <div class="score-card ${podiumClass}">
                     <div class="rank">${index + 1}</div>
                     <div class="player-details">
                         <div class="player-name">${player.player_name}</div>

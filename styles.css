@@ -450,6 +450,21 @@ body {
 }
 
 /* Scoreboard Styles */
+.scoreboard-section {
+    margin-bottom: 40px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 16px;
+}
+
+.section-title {
+    font-size: 1.8rem;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #2c3e50;
+    font-weight: 700;
+}
+
 .scores-container {
     display: flex;
     flex-direction: column;
