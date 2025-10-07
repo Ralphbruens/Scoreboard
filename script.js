@@ -87,21 +87,17 @@ class ScoreboardApp {
             // Try to load existing session by room code
             const { data, error } = await this.supabase
                 .from('sessions')
-                .select('*')
+                .select('id, room_code, data, updated_at')
                 .eq('room_code', this.sessionData.roomCode)
-                .single();
+                .maybeSingle();
     
             if (error) {
-                if (error.code === 'PGRST116') {
-                    // No rows returned - this is normal for new rooms
-                    console.log('No existing session found, creating new one');
-                    await this.saveSessionData();
-                } else {
-                    console.error('Database error loading session:', error);
-                    // Continue with local session only
-                    return;
-                }
-            } else if (data) {
+                console.error('Database error loading session:', error);
+                // Continue with local session only
+                return;
+            }
+            
+            if (data) {
                 console.log('Found existing session, loading data');
                 // Load existing session data
                 this.sessionData = { ...data.data };
@@ -114,6 +110,10 @@ class ScoreboardApp {
                 
                 // Update UI based on loaded data
                 this.updateUIFromSessionData();
+            } else {
+                // No existing session found - this is normal for new rooms
+                console.log('No existing session found, creating new one');
+                await this.saveSessionData();
             }
         } catch (error) {
             console.error('Error in loadOrCreateSession:', error);
@@ -128,9 +128,6 @@ class ScoreboardApp {
         }
 
         try {
-            // Set saving flag to prevent polling conflicts
-            this.isSaving = true;
-            
             // Update the lastUpdated timestamp
             this.sessionData.lastUpdated = Date.now();
             
@@ -169,9 +166,6 @@ class ScoreboardApp {
             }
         } catch (error) {
             console.error('Error in saveSessionData:', error);
-        } finally {
-            // Clear saving flag
-            this.isSaving = false;
         }
     }
 
@@ -182,12 +176,12 @@ class ScoreboardApp {
         }
     
         console.log('⚠️ Realtime replication not available, using polling mode');
-        console.log('Checking for updates every 1 second for room:', this.sessionData.roomCode);
+        console.log('Checking for updates every 500ms for room:', this.sessionData.roomCode);
     
         // Use polling as primary sync method (since realtime is not available)
         this.pollingInterval = setInterval(async () => {
             await this.checkForUpdates();
-        }, 1000); // Check every 1 second for better responsiveness
+        }, 500); // Check every 500ms for better responsiveness
         
         // Also check immediately
         this.checkForUpdates();
@@ -195,25 +189,20 @@ class ScoreboardApp {
 
     async checkForUpdates() {
         if (!this.supabase) return;
-        
-        // Don't check if we're currently saving (prevents conflicts)
-        if (this.isSaving) return;
 
         try {
             const { data, error } = await this.supabase
                 .from('sessions')
-                .select('*')
+                .select('id, room_code, data, updated_at')
                 .eq('room_code', this.sessionData.roomCode)
-                .single();
+                .maybeSingle();
 
             if (error) {
-                if (error.code !== 'PGRST116') { // Ignore "not found" errors
-                    console.log('Polling check failed:', error);
-                }
+                console.log('Polling check error:', error);
                 return;
             }
 
-            if (data && data.data.lastUpdated > this.sessionData.lastUpdated) {
+            if (data && data.data && data.data.lastUpdated > this.sessionData.lastUpdated) {
                 console.log('📥 Found newer data, updating UI...');
                 
                 // Store the database ID
@@ -359,6 +348,9 @@ class ScoreboardApp {
 
         // Update UI
         this.updateCheckInScreen();
+        
+        // Force immediate sync on other devices
+        console.log('✅ Player checked in, triggering immediate sync for other devices');
     }
 
     updateCheckInScreen() {
@@ -532,6 +524,7 @@ class ScoreboardApp {
         const finishedPlayers = this.brutoScores.filter(score => score !== null).length;
         
         if (finishedPlayers === activePlayers.length) {
+            console.log('🏁 All players finished, triggering immediate sync for scoreboard');
             await this.finishSession();
         }
     }
