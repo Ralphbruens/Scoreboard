@@ -109,6 +109,10 @@ class ScoreboardApp {
             return;
         }
 
+        // Check if random bonus is enabled
+        const randomBonusCheckbox = document.getElementById('random-bonus-checkbox');
+        const useRandomBonus = randomBonusCheckbox ? randomBonusCheckbox.checked : false;
+
         // Collect all filled player data
         const playerInputs = document.querySelectorAll('.player-name-input');
         const bonusInputs = document.querySelectorAll('.bonus-input-field');
@@ -118,7 +122,14 @@ class ScoreboardApp {
         for (let i = 0; i < playerInputs.length; i++) {
             const name = playerInputs[i].value.trim();
             if (name) {
-                const bonusScore = parseInt(bonusInputs[i].value) || 0;
+                let bonusScore;
+                if (useRandomBonus) {
+                    // Generate random bonus between 5 and 20 (inclusive)
+                    bonusScore = Math.floor(Math.random() * 16) + 5;
+                } else {
+                    bonusScore = parseInt(bonusInputs[i].value) || 0;
+                }
+                
                 playersToCheckIn.push({
                     player_name: name,
                     checkin_time: new Date().toISOString(),
@@ -136,6 +147,9 @@ class ScoreboardApp {
 
         try {
             console.log(`📝 Checking in ${playersToCheckIn.length} player(s)...`);
+            if (useRandomBonus) {
+                console.log('🎲 Random bonus scores assigned:', playersToCheckIn.map(p => `${p.player_name}: ${p.bonus_score}s`));
+            }
 
             const { data, error } = await this.supabase
                 .from('players')
@@ -154,7 +168,8 @@ class ScoreboardApp {
             this.clearAllCheckInFields();
 
             // Show success message
-            this.showSuccessMessage(`${playersToCheckIn.length} player(s) checked in successfully!`);
+            const bonusInfo = useRandomBonus ? ' (with random bonuses)' : '';
+            this.showSuccessMessage(`${playersToCheckIn.length} player(s) checked in successfully${bonusInfo}!`);
 
         } catch (error) {
             console.error('Error in checkInAllPlayers:', error);
@@ -255,9 +270,9 @@ class ScoreboardApp {
             playerCard.innerHTML = `
                 <div class="player-card-header">
                     <h3>${player.player_name}</h3>
-                    <span class="bonus-badge">+${player.bonus_score}s</span>
+                    <span class="bonus-badge">-${player.bonus_score}s</span>
                 </div>
-                <div class="player-timer" id="player-timer-${player.id}">00:00.00</div>
+                <div class="player-timer" id="player-timer-${player.id}">120.00</div>
                 <button class="btn btn-danger stop-player-btn" data-player-id="${player.id}" disabled>
                     Stop
                 </button>
@@ -339,21 +354,54 @@ class ScoreboardApp {
 
     updateGlobalTimer() {
         const elapsed = Date.now() - this.globalStartTime;
-        const formatted = this.formatTime(elapsed);
+        const remaining = Math.max(0, 120000 - elapsed); // 120 seconds = 120000 ms
+        const formatted = this.formatCountdown(remaining);
         const globalTimerDisplay = document.getElementById('global-timer-display');
         if (globalTimerDisplay) {
             globalTimerDisplay.textContent = formatted;
+            
+            // Change color based on time remaining
+            if (remaining <= 0) {
+                globalTimerDisplay.style.color = '#dc3545'; // Red when time's up
+            } else if (remaining <= 30000) {
+                globalTimerDisplay.style.color = '#ffc107'; // Yellow for last 30 seconds
+            } else {
+                globalTimerDisplay.style.color = '#28a745'; // Green
+            }
+        }
+
+        // Auto-stop all players when time runs out
+        if (remaining <= 0 && this.isRecording) {
+            this.autoStopAllPlayers();
         }
     }
 
     updatePlayerTimer(playerId) {
         const elapsed = Date.now() - this.globalStartTime;
-        const formatted = this.formatTime(elapsed);
+        const remaining = Math.max(0, 120000 - elapsed);
+        const formatted = this.formatCountdown(remaining);
         const timerElement = document.getElementById(`player-timer-${playerId}`);
         if (timerElement) {
             timerElement.textContent = formatted;
             timerElement.classList.add('running');
+            
+            // Change color based on time remaining
+            if (remaining <= 0) {
+                timerElement.style.color = '#dc3545';
+            } else if (remaining <= 30000) {
+                timerElement.style.color = '#ffc107';
+            } else {
+                timerElement.style.color = '#28a745';
+            }
         }
+    }
+
+    formatCountdown(milliseconds) {
+        const totalSeconds = milliseconds / 1000;
+        const seconds = Math.floor(totalSeconds);
+        const ms = Math.floor((milliseconds % 1000) / 10);
+        
+        return `${seconds.toString().padStart(3, '0')}.${ms.toString().padStart(2, '0')}`;
     }
 
     stopPlayer(playerId) {
@@ -362,12 +410,16 @@ class ScoreboardApp {
         const player = this.currentPlayers.find(p => p.id === playerId);
         if (!player) return;
 
-        const brutoTime = Date.now() - this.globalStartTime;
-        const nettoTime = brutoTime + (player.bonus_score * 1000);
+        const elapsed = Date.now() - this.globalStartTime;
+        const remainingMs = Math.max(0, 120000 - elapsed);
+        const brutoScore = Math.floor(remainingMs / 1000); // Seconds remaining
+        const nettoScore = Math.max(0, brutoScore - player.bonus_score); // Subtract bonus penalty
 
-        // Store scores
-        player.bruto_score = brutoTime;
-        player.netto_score = nettoTime;
+        // Store scores (in seconds for bruto/netto, but we'll store milliseconds for compatibility)
+        player.bruto_score = brutoScore * 1000; // Store as milliseconds for compatibility
+        player.netto_score = nettoScore * 1000;
+        player.bruto_score_seconds = brutoScore; // Actual score in seconds
+        player.netto_score_seconds = nettoScore;
 
         // Stop this player's timer
         if (this.playerTimers[playerId]) {
@@ -390,14 +442,15 @@ class ScoreboardApp {
         if (scoreDisplay) {
             scoreDisplay.innerHTML = `
                 <div class="mini-breakdown">
-                    <div>Bruto: ${this.formatTime(brutoTime)}</div>
-                    <div>Netto: ${this.formatTime(nettoTime)}</div>
+                    <div>⏱️ Bruto: ${brutoScore}s</div>
+                    <div>⚡ Bonus: -${player.bonus_score}s</div>
+                    <div class="final-score">🏆 Netto: ${nettoScore}s</div>
                 </div>
             `;
             scoreDisplay.style.display = 'block';
         }
 
-        console.log(`⏹️ ${player.player_name} stopped at ${this.formatTime(brutoTime)}`);
+        console.log(`⏹️ ${player.player_name} stopped - Bruto: ${brutoScore}s, Netto: ${nettoScore}s`);
 
         // Check if all players are done
         const allDone = this.currentPlayers.every(p => p.bruto_score !== null && p.bruto_score !== undefined);
@@ -405,6 +458,16 @@ class ScoreboardApp {
         if (allDone) {
             this.allPlayersFinished();
         }
+    }
+
+    autoStopAllPlayers() {
+        console.log('⏰ Time\'s up! Auto-stopping all remaining players...');
+        
+        this.currentPlayers.forEach(player => {
+            if (player.bruto_score === null || player.bruto_score === undefined) {
+                this.stopPlayer(player.id);
+            }
+        });
     }
 
     allPlayersFinished() {
@@ -500,7 +563,7 @@ class ScoreboardApp {
                 .from('players')
                 .select('*')
                 .not('netto_score', 'is', null)
-                .order('netto_score', { ascending: true });
+                .order('netto_score', { ascending: false }); // Higher score is better now
 
             if (error) {
                 console.error('Error loading scores:', error);
@@ -523,19 +586,27 @@ class ScoreboardApp {
             return;
         }
 
-        scoresContainer.innerHTML = scores.map((player, index) => `
-            <div class="score-card ${index < 3 ? 'podium-' + (index + 1) : ''}">
-                <div class="rank">${index + 1}</div>
-                <div class="player-details">
-                    <div class="player-name">${player.player_name}</div>
-                    <div class="score-details">
-                        ${this.formatTime(player.bruto_score)} + ${player.bonus_score}s = ${this.formatTime(player.netto_score)}
+        // Sort by netto_score DESCENDING (higher is better now)
+        const sortedScores = [...scores].sort((a, b) => b.netto_score - a.netto_score);
+
+        scoresContainer.innerHTML = sortedScores.map((player, index) => {
+            const brutoSeconds = Math.floor(player.bruto_score / 1000);
+            const nettoSeconds = Math.floor(player.netto_score / 1000);
+            
+            return `
+                <div class="score-card ${index < 3 ? 'podium-' + (index + 1) : ''}">
+                    <div class="rank">${index + 1}</div>
+                    <div class="player-details">
+                        <div class="player-name">${player.player_name}</div>
+                        <div class="score-details">
+                            ${brutoSeconds}s - ${player.bonus_score}s = ${nettoSeconds}s
+                        </div>
+                        <div class="checkin-date">${new Date(player.checkin_time).toLocaleString()}</div>
                     </div>
-                    <div class="checkin-date">${new Date(player.checkin_time).toLocaleString()}</div>
+                    <div class="netto-time">${nettoSeconds}s</div>
                 </div>
-                <div class="netto-time">${this.formatTime(player.netto_score)}</div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     startScorePolling() {

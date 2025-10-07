@@ -160,6 +160,13 @@
                     </div>
                 </div>
 
+                <div class="bonus-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="random-bonus-checkbox">
+                        <span>Use Random Bonus Scores (5-20 seconds)</span>
+                    </label>
+                </div>
+
                 <div class="checkin-actions">
                     <button id="checkin-all-btn" class="btn btn-primary">
                         Check In All Players
@@ -208,11 +215,18 @@
                 </div>
                 
                 <div class="info-box">
+                    <p><strong>Scoring Rules:</strong></p>
+                    <ul>
+                        <li>⏱️ Timer counts down from <strong>120 seconds</strong></li>
+                        <li>🎯 Bruto Score = Seconds remaining when you stop</li>
+                        <li>⚡ Netto Score = Bruto Score - Bonus Score</li>
+                        <li>🏆 Higher score is better!</li>
+                    </ul>
                     <p><strong>Instructions:</strong></p>
                     <ol>
                         <li>Click "Load Waiting Players" to fetch players from the same check-in batch</li>
                         <li>Maximum 5 players will be loaded (players checked in together)</li>
-                        <li>Click "Start All Players" when everyone is ready</li>
+                        <li>Click "Start All Players" when everyone is ready (countdown begins)</li>
                         <li>Click each player's "Stop" button when they finish</li>
                         <li>After all players finish, click "Push All Scores to Database"</li>
                         <li>Repeat to record the next batch of players</li>
