@@ -6,10 +6,6 @@
     --tertiary-color:#fff;
 }
 
-@font-face {
-    font-family: "SuisseIntlBook";
-    src: url(assets/fonts/SuisseIntl-Book.woff2);
-}
 
 
 
@@ -21,7 +17,7 @@
 }
 
 body {
-    font-family:"SuisseIntlBook", Arial, Helvetica, sans-serif ;
+    font-family: Helvetica, sans-serif ;
     background: var(--main-color);
     min-height: 100vh;
     color: #333;
@@ -118,7 +114,7 @@ color
 
 /* Main Content */
 .main-content {
-    background: var(--secondary-color);
+    background: var(--main-color)
     backdrop-filter: blur(10px);
     border-radius: ox;
     padding: 40px;
@@ -136,15 +132,17 @@ color
 
 .screen h2 {
     font-size: 2rem;
+    font-weight: 700;
     margin-bottom: 30px;
     text-align: left;
-    color: #2c3e50;
+    color: var(--tertiary-color);
+    letter-spacing: -0.04em;
 }
 
 /* Check-in Form Styles */
 .subtitle {
     text-align: left;
-    color: #6c757d;
+    color: var(--tertiary-color);
     font-size: 1.1rem;
     margin-bottom: 30px;
 }
@@ -157,12 +155,12 @@ color
 }
 
 .player-slot-checkin {
-    background: var(--tertiary-color);
+    background: var(--main-color);
     border-radius: 0px;
     padding: 25px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;
-    border: 2px solid #e9ecef;
+    border: 0px solid #e9ecef;
 }
 
 .player-slot-checkin:hover {
@@ -172,24 +170,27 @@ color
 }
 
 .field-label {
-    font-size: 1rem;
+    font-size: 1.5rem;
     font-weight: 700;
     color: #fff;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    padding: 8px 16px;
-    border-radius: 8px 8px 0 0;
-    text-align: center;
+    background: var(--main-color);
+    padding: 8px 0px;
+    border-radius: 0px;
+    border: 1px, 0px, 1px, 0px
+    text-align: left;
     margin: -25px -25px 15px -25px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: -0.04em;
+    border-top: 2px solid var(--tertiary-color);
+    border-bottom: 2px solid var(--tertiary-color);
 }
 
 .slot-number {
-    font-size: 1.2rem;
+    font-size: 1.5rem;
     font-weight: 700;
-    color: #667eea;
+    color: var(--tertiary-color);
     margin-bottom: 15px;
-    text-align: center;
+    text-align: left;
+    letter-spacing: -0.04em;
 }
 
 .form-row {
