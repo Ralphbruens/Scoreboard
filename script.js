@@ -50,16 +50,11 @@ class ScoreboardApp {
 
             this.supabase = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
             
-            // Test connection
-            const { data, error } = await this.supabase.from('sessions').select('count').limit(1);
-            
-            if (error) {
-                console.error('Supabase connection error:', error);
-                this.updateConnectionStatus('offline', 'Connection Error');
-                return;
-            }
-
+            // Simple connection test - just try to create the client
+            console.log('Supabase client created successfully');
             this.updateConnectionStatus('online', 'Connected');
+            
+            // Load or create session
             await this.loadOrCreateSession();
             
         } catch (error) {
@@ -81,9 +76,14 @@ class ScoreboardApp {
     }
 
     async loadOrCreateSession() {
-        if (!this.supabase) return;
+        if (!this.supabase) {
+            console.log('Supabase not available, using local session only');
+            return;
+        }
     
         try {
+            console.log('Loading session for room:', this.sessionData.roomCode);
+            
             // Try to load existing session by room code
             const { data, error } = await this.supabase
                 .from('sessions')
@@ -91,12 +91,18 @@ class ScoreboardApp {
                 .eq('room_code', this.sessionData.roomCode)
                 .single();
     
-            if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-                console.error('Error loading session:', error);
-                return;
-            }
-    
-            if (data) {
+            if (error) {
+                if (error.code === 'PGRST116') {
+                    // No rows returned - this is normal for new rooms
+                    console.log('No existing session found, creating new one');
+                    await this.saveSessionData();
+                } else {
+                    console.error('Database error loading session:', error);
+                    // Continue with local session only
+                    return;
+                }
+            } else if (data) {
+                console.log('Found existing session, loading data');
                 // Load existing session data
                 this.sessionData = { ...data.data };
                 this.sessionData.id = data.id; // Keep the database ID
@@ -108,32 +114,55 @@ class ScoreboardApp {
                 
                 // Update UI based on loaded data
                 this.updateUIFromSessionData();
-            } else {
-                // Create new session
-                await this.saveSessionData();
             }
         } catch (error) {
             console.error('Error in loadOrCreateSession:', error);
+            // Continue with local session only
         }
     }
 
     async saveSessionData() {
-        if (!this.supabase) return;
+        if (!this.supabase) {
+            console.log('Supabase not available, cannot save session data');
+            return;
+        }
 
         try {
-            const { error } = await this.supabase
+            // Update the lastUpdated timestamp
+            this.sessionData.lastUpdated = Date.now();
+            
+            const sessionRecord = {
+                room_code: this.sessionData.roomCode,
+                data: this.sessionData,
+                updated_at: new Date().toISOString()
+            };
+
+            console.log('Saving session data for room:', this.sessionData.roomCode);
+            
+            // Use upsert with onConflict to update existing records
+            const { data, error } = await this.supabase
                 .from('sessions')
-                .upsert({
-                    id: this.sessionData.id,
-                    room_code: this.sessionData.roomCode,
-                    data: this.sessionData,
-                    updated_at: new Date().toISOString()
-                });
+                .upsert(sessionRecord, { 
+                    onConflict: 'room_code',
+                    ignoreDuplicates: false 
+                })
+                .select();
 
             if (error) {
                 console.error('Error saving session:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    details: error.details,
+                    hint: error.hint,
+                    code: error.code
+                });
             } else {
-                console.log('Session data saved successfully');
+                console.log('Session data saved successfully to database');
+                // Store the database ID if this is the first save
+                if (data && data.length > 0 && !this.sessionData.id) {
+                    this.sessionData.id = data[0].id;
+                    console.log('Stored database ID:', this.sessionData.id);
+                }
             }
         } catch (error) {
             console.error('Error in saveSessionData:', error);
@@ -141,12 +170,15 @@ class ScoreboardApp {
     }
 
     setupRealtimeSubscription() {
-        if (!this.supabase) return;
+        if (!this.supabase) {
+            console.log('Supabase not available, skipping real-time subscription');
+            return;
+        }
     
         console.log('Setting up real-time subscription for room:', this.sessionData.roomCode);
     
-        this.supabase
-            .channel('sessions')
+        const channel = this.supabase
+            .channel('sessions-' + this.sessionData.roomCode)
             .on('postgres_changes', 
                 { 
                     event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
@@ -158,12 +190,18 @@ class ScoreboardApp {
                     console.log('Real-time update received:', payload);
                     
                     // Check if this update is for our room
-                    if (payload.new.room_code !== this.sessionData.roomCode) return;
+                    if (!payload.new || payload.new.room_code !== this.sessionData.roomCode) {
+                        console.log('Update not for our room, ignoring');
+                        return;
+                    }
                     
                     const newSessionData = payload.new.data;
                     
                     // Don't update if this is our own change (prevent loops)
-                    if (newSessionData.lastUpdated <= this.sessionData.lastUpdated) return;
+                    if (newSessionData.lastUpdated <= this.sessionData.lastUpdated) {
+                        console.log('Update is older or same, ignoring');
+                        return;
+                    }
                     
                     console.log('Applying real-time update:', newSessionData);
                     
@@ -178,7 +216,49 @@ class ScoreboardApp {
                 })
             .subscribe((status) => {
                 console.log('Realtime subscription status:', status);
+                if (status === 'SUBSCRIBED') {
+                    console.log('✅ Successfully subscribed to real-time updates');
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('❌ Real-time subscription failed');
+                }
             });
+
+        // Also set up a polling fallback every 2 seconds
+        this.pollingInterval = setInterval(async () => {
+            await this.checkForUpdates();
+        }, 2000);
+    }
+
+    async checkForUpdates() {
+        if (!this.supabase) return;
+
+        try {
+            const { data, error } = await this.supabase
+                .from('sessions')
+                .select('*')
+                .eq('room_code', this.sessionData.roomCode)
+                .single();
+
+            if (error) {
+                console.log('Polling check failed:', error);
+                return;
+            }
+
+            if (data && data.data.lastUpdated > this.sessionData.lastUpdated) {
+                console.log('Polling found newer data, updating...');
+                
+                this.sessionData = data.data;
+                this.players = [...this.sessionData.players];
+                this.bonusScores = [...this.sessionData.bonusScores];
+                this.isRecording = this.sessionData.isRecording;
+                this.brutoScores = [...this.sessionData.brutoScores];
+                this.sessionResults = [...this.sessionData.sessionResults];
+                
+                this.updateUIFromSessionData();
+            }
+        } catch (error) {
+            console.error('Error in polling check:', error);
+        }
     }
 
     updateUIFromSessionData() {
@@ -606,6 +686,12 @@ class ScoreboardApp {
 
     resetSession() {
         if (confirm('Are you sure you want to start a new session? This will clear all current data.')) {
+            // Clear polling interval
+            if (this.pollingInterval) {
+                clearInterval(this.pollingInterval);
+                this.pollingInterval = null;
+            }
+
             // Reset all data
             this.players = Array(5).fill(null);
             this.timers = Array(5).fill(null);
