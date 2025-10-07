@@ -36,7 +36,7 @@ class ScoreboardApp {
         this.updateBonusDisplay();
         await this.initializeSupabase();
         this.displayRoomCode();
-        this.setupRealtimeSubscription();
+        // No automatic polling on init - only on results screen
     }
 
     async initializeSupabase() {
@@ -50,12 +50,12 @@ class ScoreboardApp {
 
             this.supabase = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
             
-            // Simple connection test - just try to create the client
+            // Simple connection test
             console.log('Supabase client created successfully');
             this.updateConnectionStatus('online', 'Connected');
             
-            // Load or create session
-            await this.loadOrCreateSession();
+            // Try to load existing session (but don't auto-apply)
+            await this.loadSessionIfExists();
             
         } catch (error) {
             console.error('Failed to initialize Supabase:', error);
@@ -75,16 +75,15 @@ class ScoreboardApp {
         document.getElementById('room-code').textContent = this.sessionData.roomCode;
     }
 
-    async loadOrCreateSession() {
+    async loadSessionIfExists() {
         if (!this.supabase) {
             console.log('Supabase not available, using local session only');
             return;
         }
     
         try {
-            console.log('Loading session for room:', this.sessionData.roomCode);
+            console.log('Checking for existing session for room:', this.sessionData.roomCode);
             
-            // Try to load existing session by room code
             const { data, error } = await this.supabase
                 .from('sessions')
                 .select('id, room_code, data, updated_at')
@@ -93,31 +92,18 @@ class ScoreboardApp {
     
             if (error) {
                 console.error('Database error loading session:', error);
-                // Continue with local session only
                 return;
             }
             
             if (data) {
-                console.log('Found existing session, loading data');
-                // Load existing session data
-                this.sessionData = { ...data.data };
-                this.sessionData.id = data.id; // Keep the database ID
-                this.players = [...this.sessionData.players];
-                this.bonusScores = [...this.sessionData.bonusScores];
-                this.isRecording = this.sessionData.isRecording;
-                this.brutoScores = [...this.sessionData.brutoScores];
-                this.sessionResults = [...this.sessionData.sessionResults];
-                
-                // Update UI based on loaded data
-                this.updateUIFromSessionData();
+                console.log('Found existing session in database');
+                // Store it but don't auto-load (user will manually refresh)
+                this.cachedSessionData = data;
             } else {
-                // No existing session found - this is normal for new rooms
-                console.log('No existing session found, creating new one');
-                await this.saveSessionData();
+                console.log('No existing session found');
             }
         } catch (error) {
-            console.error('Error in loadOrCreateSession:', error);
-            // Continue with local session only
+            console.error('Error in loadSessionIfExists:', error);
         }
     }
 
@@ -139,7 +125,6 @@ class ScoreboardApp {
 
             console.log('📤 Saving session data for room:', this.sessionData.roomCode);
             
-            // Use upsert with onConflict to update existing records
             const { data, error } = await this.supabase
                 .from('sessions')
                 .upsert(sessionRecord, { 
@@ -150,18 +135,10 @@ class ScoreboardApp {
 
             if (error) {
                 console.error('Error saving session:', error);
-                console.error('Error details:', {
-                    message: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    code: error.code
-                });
             } else {
                 console.log('✅ Session data saved successfully to database');
-                // Store the database ID if this is the first save
                 if (data && data.length > 0 && !this.sessionData.id) {
                     this.sessionData.id = data[0].id;
-                    console.log('Stored database ID:', this.sessionData.id);
                 }
             }
         } catch (error) {
@@ -169,25 +146,89 @@ class ScoreboardApp {
         }
     }
 
-    setupRealtimeSubscription() {
+    // Manual refresh for Recording screen
+    async refreshPlayers() {
         if (!this.supabase) {
-            console.log('Supabase not available, skipping real-time subscription');
+            alert('Database not available');
             return;
         }
-    
-        console.log('⚠️ Realtime replication not available, using polling mode');
-        console.log('Checking for updates every 500ms for room:', this.sessionData.roomCode);
-    
-        // Use polling as primary sync method (since realtime is not available)
-        this.pollingInterval = setInterval(async () => {
-            await this.checkForUpdates();
-        }, 500); // Check every 500ms for better responsiveness
-        
-        // Also check immediately
-        this.checkForUpdates();
+
+        try {
+            console.log('🔄 Manually refreshing players from database...');
+            
+            const { data, error } = await this.supabase
+                .from('sessions')
+                .select('id, room_code, data, updated_at')
+                .eq('room_code', this.sessionData.roomCode)
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error fetching players:', error);
+                alert('Failed to refresh players');
+                return;
+            }
+
+            if (data && data.data) {
+                const dbId = data.id;
+                this.sessionData = data.data;
+                this.sessionData.id = dbId;
+                
+                // Update local state
+                this.players = [...this.sessionData.players];
+                this.bonusScores = [...this.sessionData.bonusScores];
+                
+                // Update Recording screen
+                this.updateRecordingScreen();
+                
+                // Show which players were loaded
+                const newPlayers = this.players.filter(p => p !== null).map(p => p.name);
+                if (newPlayers.length > 0) {
+                    const lastUpdateInfo = document.getElementById('last-update-info');
+                    if (lastUpdateInfo) {
+                        lastUpdateInfo.textContent = `✅ Loaded players: ${newPlayers.join(', ')}`;
+                        lastUpdateInfo.style.display = 'block';
+                        setTimeout(() => {
+                            lastUpdateInfo.style.display = 'none';
+                        }, 5000);
+                    }
+                }
+                
+                console.log('✅ Players refreshed successfully');
+            } else {
+                alert('No session data found');
+            }
+        } catch (error) {
+            console.error('Error in refreshPlayers:', error);
+            alert('Failed to refresh players');
+        }
     }
 
-    async checkForUpdates() {
+    // Start automatic polling for Results screen only
+    startResultsPolling() {
+        // Stop any existing polling
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+        }
+
+        console.log('📊 Starting results polling (every 2000ms)...');
+        
+        this.pollingInterval = setInterval(async () => {
+            await this.checkForNewResults();
+        }, 2000);
+        
+        // Also check immediately
+        this.checkForNewResults();
+    }
+
+    stopResultsPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+            console.log('⏹️ Stopped results polling');
+        }
+    }
+
+    async checkForNewResults() {
         if (!this.supabase) return;
 
         try {
@@ -203,56 +244,34 @@ class ScoreboardApp {
             }
 
             if (data && data.data && data.data.lastUpdated > this.sessionData.lastUpdated) {
-                console.log('📥 Found newer data, updating UI...');
+                console.log('📥 Found new results, updating scoreboard...');
                 
-                // Store the database ID
                 const dbId = data.id;
-                
-                // Update session data
                 this.sessionData = data.data;
                 this.sessionData.id = dbId;
                 
                 // Update local state
-                this.players = [...this.sessionData.players];
-                this.bonusScores = [...this.sessionData.bonusScores];
-                this.isRecording = this.sessionData.isRecording;
-                this.brutoScores = [...this.sessionData.brutoScores];
                 this.sessionResults = [...this.sessionData.sessionResults];
                 
-                // Update the UI
-                this.updateUIFromSessionData();
+                // Update Results screen
+                this.updateResultsScreen();
                 
                 // Show sync indicator
-                this.showSyncIndicator();
+                this.showSyncIndicator('New results loaded!');
             }
         } catch (error) {
             console.error('Error in polling check:', error);
         }
     }
     
-    showSyncIndicator() {
+    showSyncIndicator(message = 'Synced ✓') {
         const statusText = document.querySelector('.status-text');
         if (statusText) {
             const originalText = statusText.textContent;
-            statusText.textContent = 'Synced ✓';
+            statusText.textContent = message;
             setTimeout(() => {
                 statusText.textContent = 'Connected';
-            }, 1000);
-        }
-    }
-
-    updateUIFromSessionData() {
-        // Update check-in screen
-        this.updateCheckInScreen();
-        
-        // Update recording screen if currently recording
-        if (this.isRecording && this.sessionData.recordingStartTime) {
-            this.updateRecordingScreen();
-        }
-        
-        // Update results screen if session is complete
-        if (this.sessionResults.length > 0) {
-            this.updateResultsScreen();
+            }, 2000);
         }
     }
 
@@ -276,18 +295,44 @@ class ScoreboardApp {
             input.addEventListener('input', (e) => this.updateBonusScore(index, e.target.value));
         });
 
-        // Recording controls
-        document.getElementById('start-all-btn').addEventListener('click', () => this.startAllPlayers());
+        // Recording controls - Check if buttons exist before adding listeners
+        const refreshBtn = document.getElementById('refresh-players-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this.refreshPlayers());
+        }
+
+        const startAllBtn = document.getElementById('start-all-btn');
+        if (startAllBtn) {
+            startAllBtn.addEventListener('click', () => this.startAllPlayers());
+        }
+
+        const updateScoreboardBtn = document.getElementById('update-scoreboard-btn');
+        if (updateScoreboardBtn) {
+            updateScoreboardBtn.addEventListener('click', () => this.updateScoreboardManually());
+        }
+
         document.querySelectorAll('.stop-btn').forEach((btn, index) => {
             btn.addEventListener('click', () => this.stopPlayer(index));
         });
 
         // Action buttons
-        document.getElementById('reset-session').addEventListener('click', () => this.resetSession());
-        document.getElementById('export-results').addEventListener('click', () => this.exportResults());
+        const resetBtn = document.getElementById('reset-session');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => this.resetSession());
+        }
+
+        const exportBtn = document.getElementById('export-results');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => this.exportResults());
+        }
     }
 
     switchScreen(screenName) {
+        // Stop polling when leaving results screen
+        if (screenName !== 'results') {
+            this.stopResultsPolling();
+        }
+
         // Hide all screens
         document.querySelectorAll('.screen').forEach(screen => {
             screen.classList.remove('active');
@@ -307,6 +352,8 @@ class ScoreboardApp {
             this.updateRecordingScreen();
         } else if (screenName === 'results') {
             this.updateResultsScreen();
+            // Start automatic polling for results screen
+            this.startResultsPolling();
         }
     }
 
@@ -341,16 +388,16 @@ class ScoreboardApp {
 
         // Update session data
         this.sessionData.players[index] = this.players[index];
+        this.sessionData.bonusScores = [...this.bonusScores];
         this.sessionData.lastUpdated = Date.now();
         
-        // Save to database
+        // Save to database immediately
         await this.saveSessionData();
 
         // Update UI
         this.updateCheckInScreen();
         
-        // Force immediate sync on other devices
-        console.log('✅ Player checked in, triggering immediate sync for other devices');
+        console.log('✅ Player checked in and saved to database:', playerName);
     }
 
     updateCheckInScreen() {
@@ -377,11 +424,8 @@ class ScoreboardApp {
             }
         });
 
-        // Enable navigation to recording screen if players are checked in
-        const hasPlayers = this.players.some(p => p !== null);
-        if (hasPlayers) {
-            document.querySelector('[data-page="recording"]').style.opacity = '1';
-        }
+        // Update bonus scores display
+        this.updateBonusDisplay();
     }
 
     updateBonusScore(fieldIndex, value) {
@@ -412,60 +456,36 @@ class ScoreboardApp {
                 const timerElement = element.querySelector('.timer');
                 const stopBtn = element.querySelector('.stop-btn');
                 
-                if (this.isRecording && this.sessionData.recordingStartTime) {
-                    // Calculate elapsed time
-                    const elapsed = Date.now() - this.sessionData.recordingStartTime;
-                    timerElement.textContent = this.formatTime(elapsed);
-                    timerElement.classList.add('running');
-                    stopBtn.disabled = false;
-                    
-                    // Start local timer if not already running
-                    if (!this.timers[index]) {
-                        this.timers[index] = setInterval(() => {
-                            this.updatePlayerTimer(index);
-                        }, 100);
-                    }
-                } else if (this.brutoScores[index] !== null) {
+                if (this.brutoScores[index] !== null) {
                     // Show final time
                     timerElement.textContent = this.formatTime(this.brutoScores[index]);
                     timerElement.classList.remove('running');
                     stopBtn.disabled = true;
+                } else {
+                    timerElement.textContent = '00:00.00';
+                    stopBtn.disabled = !this.isRecording;
                 }
             } else {
                 element.style.display = 'none';
             }
         });
-        
-        // Update global timer
-        if (this.isRecording && this.sessionData.recordingStartTime) {
-            const elapsed = Date.now() - this.sessionData.recordingStartTime;
-            document.getElementById('global-timer').textContent = this.formatTime(elapsed);
-            
-            // Update start button
-            const startBtn = document.getElementById('start-all-btn');
-            startBtn.disabled = true;
-            startBtn.textContent = 'Recording...';
-        }
     }
 
     async startAllPlayers() {
         if (this.players.filter(p => p !== null).length === 0) {
-            alert('Please check in at least one player first!');
+            alert('Please refresh and load players first!');
             return;
         }
 
         this.isRecording = true;
         this.globalStartTime = Date.now();
-        this.sessionData.isRecording = true;
-        this.sessionData.recordingStartTime = this.globalStartTime;
-        this.sessionData.lastUpdated = Date.now();
-        
-        // Save to database
-        await this.saveSessionData();
         
         // Update UI
-        document.getElementById('start-all-btn').disabled = true;
-        document.getElementById('start-all-btn').textContent = 'Recording...';
+        const startBtn = document.getElementById('start-all-btn');
+        if (startBtn) {
+            startBtn.disabled = true;
+            startBtn.textContent = 'Recording...';
+        }
         
         // Start global timer
         this.globalTimer = setInterval(() => {
@@ -484,12 +504,17 @@ class ScoreboardApp {
                 document.querySelectorAll('.timer')[index].classList.add('running');
             }
         });
+
+        console.log('⏱️ All players started');
     }
 
     updateGlobalTimer() {
         const elapsed = Date.now() - this.globalStartTime;
         const formatted = this.formatTime(elapsed);
-        document.getElementById('global-timer').textContent = formatted;
+        const globalTimerEl = document.getElementById('global-timer');
+        if (globalTimerEl) {
+            globalTimerEl.textContent = formatted;
+        }
     }
 
     updatePlayerTimer(index) {
@@ -504,10 +529,6 @@ class ScoreboardApp {
         const brutoTime = Date.now() - this.startTimes[index];
         this.brutoScores[index] = brutoTime;
 
-        // Update session data
-        this.sessionData.brutoScores[index] = brutoTime;
-        this.sessionData.lastUpdated = Date.now();
-
         // Stop timer
         clearInterval(this.timers[index]);
         this.timers[index] = null;
@@ -516,22 +537,27 @@ class ScoreboardApp {
         document.querySelectorAll('.stop-btn')[index].disabled = true;
         document.querySelectorAll('.timer')[index].classList.remove('running');
         
-        // Save to database
-        await this.saveSessionData();
+        console.log(`⏹️ Player ${index + 1} stopped at ${this.formatTime(brutoTime)}`);
         
         // Check if all active players have finished
         const activePlayers = this.players.filter(p => p !== null);
         const finishedPlayers = this.brutoScores.filter(score => score !== null).length;
         
         if (finishedPlayers === activePlayers.length) {
-            console.log('🏁 All players finished, triggering immediate sync for scoreboard');
-            await this.finishSession();
+            console.log('🏁 All players finished!');
+            this.isRecording = false;
+            clearInterval(this.globalTimer);
+            
+            // Show "Update Score to Scoreboard" button
+            const updateBtn = document.getElementById('update-scoreboard-btn');
+            if (updateBtn) {
+                updateBtn.style.display = 'block';
+            }
         }
     }
 
-    async finishSession() {
-        this.isRecording = false;
-        clearInterval(this.globalTimer);
+    async updateScoreboardManually() {
+        console.log('📊 Manually updating scoreboard...');
         
         // Calculate results
         this.sessionResults = this.players.map((player, index) => {
@@ -547,12 +573,12 @@ class ScoreboardApp {
             return null;
         }).filter(result => result !== null);
 
-        // Sort by netto time (ascending - lower is better)
+        // Sort by netto time
         this.sessionResults.sort((a, b) => a.nettoTime - b.nettoTime);
 
         // Update session data
-        this.sessionData.isRecording = false;
         this.sessionData.sessionResults = this.sessionResults;
+        this.sessionData.brutoScores = [...this.brutoScores];
         this.sessionData.lastUpdated = Date.now();
 
         // Save to database
@@ -560,6 +586,8 @@ class ScoreboardApp {
 
         // Update leaderboards
         this.updateLeaderboards();
+        
+        alert('✅ Scores uploaded to scoreboard successfully!');
         
         // Switch to results screen
         this.switchScreen('results');
@@ -595,12 +623,14 @@ class ScoreboardApp {
     updateResultsScreen() {
         // Update current session results
         const currentResultsContainer = document.getElementById('current-results');
-        currentResultsContainer.innerHTML = '';
+        if (currentResultsContainer) {
+            currentResultsContainer.innerHTML = '';
 
-        this.sessionResults.forEach((result, index) => {
-            const resultCard = this.createResultCard(result, index + 1);
-            currentResultsContainer.appendChild(resultCard);
-        });
+            this.sessionResults.forEach((result, index) => {
+                const resultCard = this.createResultCard(result, index + 1);
+                currentResultsContainer.appendChild(resultCard);
+            });
+        }
 
         // Update today's leaderboard
         this.updateLeaderboardDisplay('today-leaderboard', this.todayLeaderboard);
@@ -639,6 +669,8 @@ class ScoreboardApp {
 
     updateLeaderboardDisplay(containerId, leaderboard) {
         const container = document.getElementById(containerId);
+        if (!container) return;
+
         container.innerHTML = '';
 
         if (leaderboard.length === 0) {
@@ -670,11 +702,8 @@ class ScoreboardApp {
 
     resetSession() {
         if (confirm('Are you sure you want to start a new session? This will clear all current data.')) {
-            // Clear polling interval
-            if (this.pollingInterval) {
-                clearInterval(this.pollingInterval);
-                this.pollingInterval = null;
-            }
+            // Stop polling
+            this.stopResultsPolling();
 
             // Reset all data
             this.players = Array(5).fill(null);
@@ -715,9 +744,21 @@ class ScoreboardApp {
         });
 
         // Reset recording screen
-        document.getElementById('start-all-btn').disabled = false;
-        document.getElementById('start-all-btn').textContent = 'Start All Players';
-        document.getElementById('global-timer').textContent = '00:00:00';
+        const startBtn = document.getElementById('start-all-btn');
+        if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.textContent = 'Start All Players';
+        }
+
+        const globalTimer = document.getElementById('global-timer');
+        if (globalTimer) {
+            globalTimer.textContent = '00:00:00';
+        }
+
+        const updateBtn = document.getElementById('update-scoreboard-btn');
+        if (updateBtn) {
+            updateBtn.style.display = 'none';
+        }
         
         document.querySelectorAll('.timer').forEach(timer => {
             timer.textContent = '00:00:00';

@@ -130,9 +130,12 @@
             <div id="recording-screen" class="screen">
                 <h2>Score Recording</h2>
                 <div class="recording-controls">
+                    <button id="refresh-players-btn" class="refresh-btn">🔄 Refresh Players</button>
                     <button id="start-all-btn" class="start-btn">Start All Players</button>
                     <div class="timer-display" id="global-timer">00:00:00</div>
+                    <button id="update-scoreboard-btn" class="update-scoreboard-btn" style="display: none;">📊 Update Score to Scoreboard</button>
                 </div>
+                <div id="last-update-info" class="last-update-info" style="display: none;"></div>
                 
                 <div class="players-recording">
                     <div class="player-recording" data-slot="0">
