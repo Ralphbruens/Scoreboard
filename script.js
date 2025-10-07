@@ -137,6 +137,7 @@ class ScoreboardApp {
                 
                 playersToCheckIn.push({
                     player_name: name,
+                    field_number: i + 1, // Store which field (1-5) this player is assigned to
                     checkin_time: new Date().toISOString(),
                     bonus_score: bonusScore,
                     bruto_score: null,
@@ -275,8 +276,8 @@ class ScoreboardApp {
             playerCard.dataset.playerId = player.id;
             playerCard.dataset.playerIndex = index;
 
-            // Determine field number (1-5)
-            const fieldNumber = (index % 5) + 1;
+            // Use the actual field number assigned during check-in
+            const fieldNumber = player.field_number || (index + 1);
 
             playerCard.innerHTML = `
                 <div class="field-label-recording">Field ${fieldNumber}</div>

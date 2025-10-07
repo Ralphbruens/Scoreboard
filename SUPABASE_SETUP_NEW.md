@@ -37,6 +37,7 @@ Run this SQL in Supabase SQL Editor:
 CREATE TABLE players (
     id SERIAL PRIMARY KEY,
     player_name TEXT NOT NULL,
+    field_number INTEGER,
     checkin_time TIMESTAMP WITH TIME ZONE NOT NULL,
     bonus_score INTEGER DEFAULT 0,
     bruto_score BIGINT,
@@ -67,6 +68,7 @@ In Supabase Dashboard → Table Editor → `players` table should have these col
 |----------------|----------------------------|----------|---------|
 | id             | integer (PRIMARY KEY)      | No       | Auto    |
 | player_name    | text                       | No       | -       |
+| field_number   | integer                    | Yes      | NULL    |
 | checkin_time   | timestamp with time zone   | No       | -       |
 | bonus_score    | integer                    | Yes      | 0       |
 | bruto_score    | bigint                     | Yes      | NULL    |
