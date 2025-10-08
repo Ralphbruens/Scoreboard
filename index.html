@@ -19,6 +19,7 @@
                 <button class="nav-btn active" data-page="checkin">Check-in</button>
                 <button class="nav-btn" data-page="recording">Recording</button>
                 <button class="nav-btn" data-page="results">Scoreboard</button>
+                <button class="nav-btn" data-page="clock">Clock</button>
             </nav>
         </header>
 
@@ -308,6 +309,21 @@
                     <h3 class="section-title">⭐ Weekly Top 10</h3>
                     <div id="weekly-scores-list" class="scores-container">
                         <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clock Screen -->
+            <div id="clock-screen" class="screen">
+                <div class="clock-container">
+                    <div class="clock-status" id="clock-status">
+                        <span class="clock-status-text">Timer not started</span>
+                    </div>
+                    <div class="clock-display" id="clock-display">
+                        120.00
+                    </div>
+                    <div class="clock-info" id="clock-info">
+                        Synced with Recording Screen
                     </div>
                 </div>
             </div>

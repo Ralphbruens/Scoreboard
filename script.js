@@ -383,9 +383,33 @@ class ScoreboardApp {
             }
         }
 
+        // Update clock screen display
+        this.updateClockDisplay(remaining, formatted);
+
         // Auto-stop all players when time runs out
         if (remaining <= 0 && this.isRecording) {
             this.autoStopAllPlayers();
+        }
+    }
+
+    updateClockDisplay(remaining, formatted) {
+        const clockDisplay = document.getElementById('clock-display');
+        const clockStatus = document.querySelector('.clock-status-text');
+        
+        if (clockDisplay) {
+            clockDisplay.textContent = formatted;
+            
+            // Change color based on time remaining
+            if (remaining <= 0) {
+                clockDisplay.style.color = '#dc3545'; // Red when time's up
+                if (clockStatus) clockStatus.textContent = 'Time\'s Up!';
+            } else if (remaining <= 30000) {
+                clockDisplay.style.color = '#ffc107'; // Yellow for last 30 seconds
+                if (clockStatus) clockStatus.textContent = 'Timer Running - Final 30 Seconds!';
+            } else {
+                clockDisplay.style.color = '#CBFF73'; // Green
+                if (clockStatus) clockStatus.textContent = 'Timer Running';
+            }
         }
     }
 
@@ -561,6 +585,17 @@ class ScoreboardApp {
             globalTimerDisplay.textContent = '00:00.00';
         }
         if (pushAllBtn) pushAllBtn.style.display = 'none';
+
+        // Reset clock display
+        const clockDisplay = document.getElementById('clock-display');
+        const clockStatus = document.querySelector('.clock-status-text');
+        if (clockDisplay) {
+            clockDisplay.textContent = '120.00';
+            clockDisplay.style.color = '#CBFF73';
+        }
+        if (clockStatus) {
+            clockStatus.textContent = 'Timer not started';
+        }
     }
 
     async loadScores() {
