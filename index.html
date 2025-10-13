@@ -8,8 +8,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <button id="header-toggle-btn" class="header-toggle-btn" title="Toggle Menu">
+        <span class="toggle-icon">▲</span>
+    </button>
+    
     <div class="container">
-        <header class="header">
+        <header class="header" id="main-header">
             <h1>Scoreboard App</h1>
             <div class="connection-status" id="connection-status">
                 <span class="status-indicator offline"></span>
@@ -284,30 +288,48 @@
 
             <!-- Results/Scoreboard Screen -->
             <div id="results-screen" class="screen">
-                <h2>Scoreboard</h2>
-                <p class="auto-refresh-note">🔄 Auto-refreshing every 2 seconds</p>
-                
-                <!-- Last 5 Players -->
-                <div class="scoreboard-section">
-                    <h3 class="section-title">📋 Last 5 Players</h3>
-                    <div id="recent-scores-list" class="scores-container">
-                        <!-- Populated by JavaScript -->
-                    </div>
+                <div class="score-header-container">
+                    <h1>Score</h1>
+                    <!-- <p class="auto-refresh-note">🔄 Auto-refreshing every 2 seconds</p> -->
+                    <img src="assets/img/up_icon_bollen.png" alt="Unfair Play" class="score-logo">
                 </div>
-
-                <!-- Today's Top 10 -->
-                <div class="scoreboard-section">
-                    <h3 class="section-title">🏆 Today's Top 10</h3>
-                    <div id="today-scores-list" class="scores-container">
-                        <!-- Populated by JavaScript -->
+                <div class="scoreboard-container">
+                    <!-- Recent Players -->
+                    <div class="scoreboard-column">
+                        <div class="column-header">
+                            <h3>Recent</h3>
+                        </div>
+                        <div class="table-container">
+                            <div class="table-header">
+                                <div class="header-cell">Field</div>
+                                <div class="header-cell">Player</div>
+                                <div class="header-cell">Bruto</div>
+                                <div class="header-cell">Bonus</div>
+                                <div class="header-cell">Netto Score</div>
+                            </div>
+                            <div id="recent-scores-list" class="scores-table">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                <!-- Weekly Top 10 -->
-                <div class="scoreboard-section">
-                    <h3 class="section-title">⭐ Weekly Top 10</h3>
-                    <div id="weekly-scores-list" class="scores-container">
-                        <!-- Populated by JavaScript -->
+                    <!-- Highscore -->
+                    <div class="scoreboard-column">
+                        <div class="column-header">
+                            <h3>Highscore</h3>
+                        </div>
+                        <div class="table-container">
+                            <div class="table-header">
+                                <div class="header-cell">Field</div>
+                                <div class="header-cell">Player</div>
+                                <div class="header-cell">Bruto </div>
+                                <div class="header-cell">Bonus</div>
+                                <div class="header-cell">Netto Score</div>
+                            </div>
+                            <div id="weekly-scores-list" class="scores-table">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

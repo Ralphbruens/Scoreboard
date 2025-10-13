@@ -46,6 +46,12 @@ class ScoreboardApp {
             btn.addEventListener('click', (e) => this.switchScreen(e.target.dataset.page));
         });
 
+        // Header toggle button
+        const headerToggleBtn = document.getElementById('header-toggle-btn');
+        if (headerToggleBtn) {
+            headerToggleBtn.addEventListener('click', () => this.toggleHeader());
+        }
+
         // Multi-player check-in
         const checkinAllBtn = document.getElementById('checkin-all-btn');
         const clearAllBtn = document.getElementById('clear-all-btn');
@@ -73,6 +79,16 @@ class ScoreboardApp {
 
         if (pushAllScoresBtn) {
             pushAllScoresBtn.addEventListener('click', () => this.pushAllScoresToDatabase());
+        }
+    }
+
+    toggleHeader() {
+        const header = document.getElementById('main-header');
+        const toggleBtn = document.getElementById('header-toggle-btn');
+        
+        if (header && toggleBtn) {
+            header.classList.toggle('hidden');
+            toggleBtn.classList.toggle('header-hidden');
         }
     }
 
@@ -575,10 +591,7 @@ class ScoreboardApp {
             // Load last 5 players (most recent)
             await this.loadRecentScores();
 
-            // Load today's top 10
-            await this.loadTodayTopScores();
-
-            // Load weekly top 10
+            // Load weekly top 5 (highscore)
             await this.loadWeeklyTopScores();
 
         } catch (error) {
@@ -646,7 +659,7 @@ class ScoreboardApp {
                 .not('netto_score', 'is', null)
                 .gte('checkin_time', weekAgoISO)
                 .order('netto_score', { ascending: false })
-                .limit(10);
+                .limit(5);
 
             if (error) {
                 console.error('Error loading weekly scores:', error);
@@ -665,28 +678,25 @@ class ScoreboardApp {
         if (!scoresContainer) return;
 
         if (scores.length === 0) {
-            scoresContainer.innerHTML = '<p class="no-scores">No scores recorded yet</p>';
+            scoresContainer.innerHTML = '<div class="score-row"><div class="no-scores">No scores recorded yet</div></div>';
             return;
         }
 
         scoresContainer.innerHTML = scores.map((player, index) => {
             const brutoSeconds = Math.floor(player.bruto_score / 1000);
             const nettoSeconds = Math.floor(player.netto_score / 1000);
+            const bonusText = player.bonus_score > 0 ? `+${player.bonus_score}` : '0';
             
-            // Show podium styling only for top 3 in ranked lists
-            const podiumClass = (showRanking && index < 3) ? 'podium-' + (index + 1) : '';
+            // Use field_number from database, fallback to index + 1 if not available
+            const fieldNumber = player.field_number || (index + 1);
             
             return `
-                <div class="score-card ${podiumClass}">
-                    <div class="rank">${index + 1}</div>
-                    <div class="player-details">
-                        <div class="player-name">${player.player_name}</div>
-                        <div class="score-details">
-                            ${brutoSeconds}s + ${player.bonus_score}s = ${nettoSeconds}s
-                        </div>
-                        <div class="checkin-date">${new Date(player.checkin_time).toLocaleString()}</div>
-                    </div>
-                    <div class="netto-time">${nettoSeconds}s</div>
+                <div class="score-row">
+                    <div class="field-number">${fieldNumber}</div>
+                    <div class="player-name">${player.player_name}</div>
+                    <div class="bruto-score">${brutoSeconds}</div>
+                    <div class="bonus-score">${bonusText}</div>
+                    <div class="netto-score">${nettoSeconds}</div>
                 </div>
             `;
         }).join('');
