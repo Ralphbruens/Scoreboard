@@ -566,10 +566,11 @@ color
 }
 
 .score-logo {
-    height: 20rem;
-    width: auto;
+    height: auto;
+    width: 30vw;
     object-fit: contain;
     padding-bottom: 20px;
+    margin-bottom: 64px;
 }
 
 .scoreboard-container {
@@ -577,6 +578,7 @@ color
     display: flex;
     gap: 30px;
     align-items: flex-start;
+
 }
 
 .scoreboard-column {
