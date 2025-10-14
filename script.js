@@ -18,12 +18,34 @@ class ScoreboardApp {
     }
 
     initTimerChannel() {
+        // Timer sync is now handled via Supabase Realtime for cross-device support
+        // BroadcastChannel only works on same device, Supabase works across devices
+        console.log('Timer sync will use Supabase Realtime for cross-device support');
+    }
+
+    async syncTimerState(state, startTime = null) {
+        if (!this.supabase) {
+            console.warn('Cannot sync timer: Supabase not available');
+            return;
+        }
+
         try {
-            // Create BroadcastChannel for syncing with clock page
-            this.timerChannel = new BroadcastChannel('timer-sync');
-            console.log('Timer sync channel initialized');
+            const { error } = await this.supabase
+                .from('timer_sync')
+                .update({ 
+                    timer_state: state,
+                    start_time: startTime,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', 1);
+
+            if (error) {
+                console.error('Failed to sync timer state:', error);
+            } else {
+                console.log(`Timer synced: ${state}`, startTime ? `Start time: ${startTime}` : '');
+            }
         } catch (error) {
-            console.warn('BroadcastChannel not available:', error);
+            console.error('Error syncing timer:', error);
         }
     }
 
@@ -376,7 +398,7 @@ class ScoreboardApp {
         }
     }
 
-    startAllPlayers() {
+    async startAllPlayers() {
         if (this.currentPlayers.length === 0) {
             alert('No players to start');
             return;
@@ -385,14 +407,8 @@ class ScoreboardApp {
         this.isRecording = true;
         this.globalStartTime = Date.now();
         
-        // Broadcast timer start to clock page
-        if (this.timerChannel) {
-            this.timerChannel.postMessage({
-                type: 'timer-start',
-                startTime: this.globalStartTime
-            });
-            console.log('Broadcasted timer-start event');
-        }
+        // Sync timer state to Supabase for cross-device synchronization
+        await this.syncTimerState('running', this.globalStartTime);
         
         // Hide start button, show global timer
         const startAllBtn = document.getElementById('start-all-btn');
@@ -541,7 +557,7 @@ class ScoreboardApp {
         });
     }
 
-    allPlayersFinished() {
+    async allPlayersFinished() {
         console.log('🏁 All players finished!');
         
         // Stop global timer
@@ -552,13 +568,8 @@ class ScoreboardApp {
 
         this.isRecording = false;
 
-        // Broadcast timer stop to clock page
-        if (this.timerChannel) {
-            this.timerChannel.postMessage({
-                type: 'timer-stop'
-            });
-            console.log('Broadcasted timer-stop event');
-        }
+        // Sync timer stop to Supabase for cross-device synchronization
+        await this.syncTimerState('stopped', null);
 
         // Show push all scores button
         const pushAllBtn = document.getElementById('push-all-scores-btn');
@@ -609,19 +620,14 @@ class ScoreboardApp {
         }
     }
 
-    resetRecordingPage() {
+    async resetRecordingPage() {
         this.currentPlayers = [];
         this.playerTimers = {};
         this.globalStartTime = null;
         this.isRecording = false;
 
-        // Broadcast timer reset to clock page
-        if (this.timerChannel) {
-            this.timerChannel.postMessage({
-                type: 'timer-reset'
-            });
-            console.log('Broadcasted timer-reset event');
-        }
+        // Sync timer reset to Supabase for cross-device synchronization
+        await this.syncTimerState('stopped', null);
 
         const grid = document.getElementById('players-recording-grid');
         const startAllBtn = document.getElementById('start-all-btn');

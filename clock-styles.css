@@ -36,6 +36,11 @@ body {
     opacity: 0.8;
 }
 
+.status-indicator.connected {
+    color: var(--secondary-color);
+    opacity: 0.6;
+}
+
 .status-indicator.running {
     color: var(--secondary-color);
     animation: pulse 2s infinite;
@@ -49,7 +54,7 @@ body {
     font-size: 25rem;
     font-weight: 700;
     color: var(--secondary-color);
-    font-family: 'Courier New', monospace;
+    font-family: Helvetica, sans-serif;
     line-height: 1;
     letter-spacing: -0.05em;
     text-shadow: 0 0 40px rgba(203, 255, 115, 0.3);

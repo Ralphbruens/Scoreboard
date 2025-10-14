@@ -1,39 +1,106 @@
-// Clock page - synchronized with recording page
+// Clock page - synchronized with recording page via Supabase Realtime
 class SyncedClock {
     constructor() {
         this.startTime = null;
         this.timerInterval = null;
         this.isRunning = false;
-        this.channel = null;
+        this.supabase = null;
+        this.subscription = null;
         
         this.init();
     }
 
-    init() {
-        // Create BroadcastChannel for communication between pages
-        this.channel = new BroadcastChannel('timer-sync');
-        
-        // Listen for messages from the recording page
-        this.channel.onmessage = (event) => {
-            this.handleMessage(event.data);
-        };
-
-        console.log('Clock initialized and listening for timer events...');
+    async init() {
+        await this.initializeSupabase();
+        this.subscribeToTimerUpdates();
+        console.log('Clock initialized and listening for timer events via Supabase...');
     }
 
-    handleMessage(data) {
-        console.log('Received message:', data);
+    async initializeSupabase() {
+        try {
+            if (SUPABASE_CONFIG.url === 'YOUR_SUPABASE_URL' || SUPABASE_CONFIG.anonKey === 'YOUR_SUPABASE_ANON_KEY') {
+                console.error('Supabase not configured! Please update config.js');
+                this.showError('Supabase not configured');
+                return;
+            }
+
+            this.supabase = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+            console.log('Supabase client created successfully');
+            
+            // Load initial timer state
+            await this.loadInitialState();
+        } catch (error) {
+            console.error('Failed to initialize Supabase:', error);
+            this.showError('Connection failed');
+        }
+    }
+
+    async loadInitialState() {
+        try {
+            const { data, error } = await this.supabase
+                .from('timer_sync')
+                .select('*')
+                .eq('id', 1)
+                .single();
+
+            if (error) {
+                console.error('Failed to load initial state:', error);
+                return;
+            }
+
+            if (data && data.timer_state === 'running' && data.start_time) {
+                // Timer is already running, sync with it
+                this.startTimer(data.start_time);
+            }
+        } catch (error) {
+            console.error('Error loading initial state:', error);
+        }
+    }
+
+    subscribeToTimerUpdates() {
+        if (!this.supabase) return;
+
+        // Subscribe to realtime changes on timer_sync table
+        this.subscription = this.supabase
+            .channel('timer-sync-channel')
+            .on('postgres_changes', 
+                { event: 'UPDATE', schema: 'public', table: 'timer_sync' },
+                (payload) => {
+                    console.log('Timer update received:', payload);
+                    this.handleTimerUpdate(payload.new);
+                }
+            )
+            .subscribe((status) => {
+                console.log('Subscription status:', status);
+                if (status === 'SUBSCRIBED') {
+                    this.updateStatus('Connected', 'connected');
+                }
+            });
+    }
+
+    handleTimerUpdate(data) {
+        console.log('Handling timer update:', data);
         
-        switch(data.type) {
-            case 'timer-start':
-                this.startTimer(data.startTime);
-                break;
-            case 'timer-stop':
-                this.stopTimer();
-                break;
-            case 'timer-reset':
-                this.resetTimer();
-                break;
+        if (data.timer_state === 'running' && data.start_time) {
+            this.startTimer(data.start_time);
+        } else if (data.timer_state === 'stopped') {
+            this.stopTimer();
+        }
+    }
+
+    showError(message) {
+        const statusEl = document.getElementById('status');
+        if (statusEl) {
+            statusEl.textContent = message;
+            statusEl.style.color = '#dc3545';
+        }
+    }
+
+    updateStatus(text, className = '') {
+        const statusEl = document.getElementById('status');
+        if (statusEl) {
+            statusEl.textContent = text;
+            statusEl.className = 'status-indicator ' + className;
         }
     }
 
@@ -43,12 +110,7 @@ class SyncedClock {
         this.isRunning = true;
         
         // Update status
-        const statusEl = document.getElementById('status');
-        if (statusEl) {
-            statusEl.textContent = 'Running';
-            statusEl.classList.add('running');
-            statusEl.classList.remove('stopped');
-        }
+        this.updateStatus('Running', 'running');
 
         // Clear any existing interval
         if (this.timerInterval) {
@@ -74,17 +136,15 @@ class SyncedClock {
         }
 
         // Update status
-        const statusEl = document.getElementById('status');
-        if (statusEl) {
-            statusEl.textContent = 'Stopped';
-            statusEl.classList.add('stopped');
-            statusEl.classList.remove('running');
-        }
+        this.updateStatus('Stopped', 'stopped');
+        
+        // Reset display after a short delay
+        setTimeout(() => {
+            this.resetDisplay();
+        }, 2000);
     }
 
-    resetTimer() {
-        console.log('Resetting timer');
-        this.stopTimer();
+    resetDisplay() {
         this.startTime = null;
         
         // Reset display
@@ -95,11 +155,7 @@ class SyncedClock {
         }
 
         // Update status
-        const statusEl = document.getElementById('status');
-        if (statusEl) {
-            statusEl.textContent = 'Waiting...';
-            statusEl.classList.remove('running', 'stopped');
-        }
+        this.updateStatus('Waiting...', '');
     }
 
     updateDisplay() {
