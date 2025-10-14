@@ -7,12 +7,24 @@ class ScoreboardApp {
         this.globalTimer = null;
         this.playerTimers = {};
         this.isRecording = false;
+        this.timerChannel = null;
         this.init();
     }
 
     async init() {
         this.setupEventListeners();
         await this.initializeSupabase();
+        this.initTimerChannel();
+    }
+
+    initTimerChannel() {
+        try {
+            // Create BroadcastChannel for syncing with clock page
+            this.timerChannel = new BroadcastChannel('timer-sync');
+            console.log('Timer sync channel initialized');
+        } catch (error) {
+            console.warn('BroadcastChannel not available:', error);
+        }
     }
 
     async initializeSupabase() {
@@ -68,6 +80,7 @@ class ScoreboardApp {
         const loadPlayersBtn = document.getElementById('load-players-btn');
         const startAllBtn = document.getElementById('start-all-btn');
         const pushAllScoresBtn = document.getElementById('push-all-scores-btn');
+        const openClockBtn = document.getElementById('open-clock-btn');
 
         if (loadPlayersBtn) {
             loadPlayersBtn.addEventListener('click', () => this.loadWaitingPlayers());
@@ -80,6 +93,10 @@ class ScoreboardApp {
         if (pushAllScoresBtn) {
             pushAllScoresBtn.addEventListener('click', () => this.pushAllScoresToDatabase());
         }
+
+        if (openClockBtn) {
+            openClockBtn.addEventListener('click', () => this.openClockPage());
+        }
     }
 
     toggleHeader() {
@@ -90,6 +107,22 @@ class ScoreboardApp {
             header.classList.toggle('hidden');
             toggleBtn.classList.toggle('header-hidden');
         }
+    }
+
+    openClockPage() {
+        // Open clock page in a new window
+        const width = 1200;
+        const height = 800;
+        const left = (screen.width - width) / 2;
+        const top = (screen.height - height) / 2;
+        
+        window.open(
+            'clock.html',
+            'ClockDisplay',
+            `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no`
+        );
+        
+        console.log('Opened clock display window');
     }
 
     switchScreen(screenName) {
@@ -352,6 +385,15 @@ class ScoreboardApp {
         this.isRecording = true;
         this.globalStartTime = Date.now();
         
+        // Broadcast timer start to clock page
+        if (this.timerChannel) {
+            this.timerChannel.postMessage({
+                type: 'timer-start',
+                startTime: this.globalStartTime
+            });
+            console.log('Broadcasted timer-start event');
+        }
+        
         // Hide start button, show global timer
         const startAllBtn = document.getElementById('start-all-btn');
         const globalTimerDisplay = document.getElementById('global-timer-display');
@@ -510,6 +552,14 @@ class ScoreboardApp {
 
         this.isRecording = false;
 
+        // Broadcast timer stop to clock page
+        if (this.timerChannel) {
+            this.timerChannel.postMessage({
+                type: 'timer-stop'
+            });
+            console.log('Broadcasted timer-stop event');
+        }
+
         // Show push all scores button
         const pushAllBtn = document.getElementById('push-all-scores-btn');
         if (pushAllBtn) {
@@ -564,6 +614,14 @@ class ScoreboardApp {
         this.playerTimers = {};
         this.globalStartTime = null;
         this.isRecording = false;
+
+        // Broadcast timer reset to clock page
+        if (this.timerChannel) {
+            this.timerChannel.postMessage({
+                type: 'timer-reset'
+            });
+            console.log('Broadcasted timer-reset event');
+        }
 
         const grid = document.getElementById('players-recording-grid');
         const startAllBtn = document.getElementById('start-all-btn');

@@ -870,14 +870,22 @@ color
 /* Recording Screen Styles */
 .recording-controls {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
+    justify-content: center;
     gap: 20px;
     margin-bottom: 30px;
     padding: 30px;
     background: var(--main-color);
     border-radius: 16px;
     border: 2px solid var(--secondary-color);
+}
+
+.recording-controls .btn {
+    min-width: 200px;
+    padding: 15px 30px;
+    width: auto;
 }
 
 .global-timer {
