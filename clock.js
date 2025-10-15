@@ -150,7 +150,7 @@ class SyncedClock {
         // Reset display
         const clockEl = document.getElementById('clock');
         if (clockEl) {
-            clockEl.textContent = '120.00';
+            clockEl.textContent = '90.00';
             clockEl.style.color = '#CBFF73';
         }
 
@@ -162,7 +162,7 @@ class SyncedClock {
         if (!this.isRunning || !this.startTime) return;
 
         const elapsed = Date.now() - this.startTime;
-        const remaining = Math.max(0, 120000 - elapsed); // 120 seconds = 120000ms
+        const remaining = Math.max(0, 90000 - elapsed); // 90 seconds = 90000ms
         const formatted = this.formatCountdown(remaining);
 
         const clockEl = document.getElementById('clock');

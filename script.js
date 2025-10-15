@@ -184,22 +184,31 @@ class ScoreboardApp {
         const playerInputs = document.querySelectorAll('.player-name-input');
         const bonusInputs = document.querySelectorAll('.bonus-input-field');
         const randomBonusChecks = document.querySelectorAll('.random-bonus-check');
-        const noBonusChecks = document.querySelectorAll('.no-bonus-check');
         
         const playersToCheckIn = [];
+        
+        // Field-specific bonus ranges
+        const fieldRanges = [
+            { min: 15, max: 25 }, // Field 1: 15-25 seconds
+            { min: 45, max: 55 }, // Field 2: 45-55 seconds
+            { min: 0, max: 0 },   // Field 3: 0 seconds
+            { min: 25, max: 35 }, // Field 4: 25-35 seconds
+            { min: 5, max: 15 }   // Field 5: 5-15 seconds
+        ];
         
         for (let i = 0; i < playerInputs.length; i++) {
             const name = playerInputs[i].value.trim();
             if (name) {
                 let bonusScore;
                 
-                // Check if "No Bonus" is checked for this player
-                if (noBonusChecks[i].checked) {
-                    bonusScore = 0;
-                }
                 // Check if "Random Bonus" is checked for this player
-                else if (randomBonusChecks[i].checked) {
-                    bonusScore = Math.floor(Math.random() * 16) + 5; // 5-20
+                if (randomBonusChecks[i].checked) {
+                    const range = fieldRanges[i];
+                    if (range.min === range.max) {
+                        bonusScore = range.min;
+                    } else {
+                        bonusScore = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+                    }
                 }
                 // Use manual bonus input
                 else {
@@ -259,10 +268,7 @@ class ScoreboardApp {
             input.value = '0';
         });
         document.querySelectorAll('.random-bonus-check').forEach(checkbox => {
-            checkbox.checked = false;
-        });
-        document.querySelectorAll('.no-bonus-check').forEach(checkbox => {
-            checkbox.checked = false;
+            checkbox.checked = true; // Set back to default (checked)
         });
     }
 
@@ -356,7 +362,7 @@ class ScoreboardApp {
                     <h3>${player.player_name}</h3>
                     <span class="bonus-badge">+${player.bonus_score}s</span>
                 </div>
-                <div class="player-timer" id="player-timer-${player.id}">120.00</div>
+                <div class="player-timer" id="player-timer-${player.id}">90.00</div>
                 <button class="btn btn-danger stop-player-btn" data-player-id="${player.id}" disabled>
                     Stop
                 </button>
@@ -441,7 +447,7 @@ class ScoreboardApp {
 
     updateGlobalTimer() {
         const elapsed = Date.now() - this.globalStartTime;
-        const remaining = Math.max(0, 120000 - elapsed); // 120 seconds = 120000 ms
+        const remaining = Math.max(0, 90000 - elapsed); // 90 seconds = 90000 ms
         const formatted = this.formatCountdown(remaining);
         const globalTimerDisplay = document.getElementById('global-timer-display');
         if (globalTimerDisplay) {
@@ -465,7 +471,7 @@ class ScoreboardApp {
 
     updatePlayerTimer(playerId) {
         const elapsed = Date.now() - this.globalStartTime;
-        const remaining = Math.max(0, 120000 - elapsed);
+        const remaining = Math.max(0, 90000 - elapsed);
         const formatted = this.formatCountdown(remaining);
         const timerElement = document.getElementById(`player-timer-${playerId}`);
         if (timerElement) {
@@ -498,7 +504,7 @@ class ScoreboardApp {
         if (!player) return;
 
         const elapsed = Date.now() - this.globalStartTime;
-        const remainingMs = Math.max(0, 120000 - elapsed);
+        const remainingMs = Math.max(0, 90000 - elapsed);
         const brutoScore = Math.floor(remainingMs / 1000); // Seconds remaining
         const nettoScore = brutoScore + player.bonus_score; // Add bonus score
 
