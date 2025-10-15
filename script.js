@@ -98,6 +98,23 @@ class ScoreboardApp {
             clearAllBtn.addEventListener('click', () => this.clearAllCheckInFields());
         }
 
+        // Bonus settings toggle buttons
+        document.querySelectorAll('.btn-toggle-bonus').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = e.target.dataset.index;
+                const bonusSection = document.querySelector(`.bonus-section[data-index="${index}"]`);
+                if (bonusSection) {
+                    if (bonusSection.style.display === 'none') {
+                        bonusSection.style.display = 'block';
+                        e.target.textContent = 'Hide Settings';
+                    } else {
+                        bonusSection.style.display = 'none';
+                        e.target.textContent = 'Settings';
+                    }
+                }
+            });
+        });
+
         // Recording controls
         const loadPlayersBtn = document.getElementById('load-players-btn');
         const startAllBtn = document.getElementById('start-all-btn');
@@ -264,11 +281,21 @@ class ScoreboardApp {
         document.querySelectorAll('.player-name-input').forEach(input => {
             input.value = '';
         });
+        document.querySelectorAll('.postal-code-input').forEach(input => {
+            input.value = '';
+        });
         document.querySelectorAll('.bonus-input-field').forEach(input => {
             input.value = '0';
         });
         document.querySelectorAll('.random-bonus-check').forEach(checkbox => {
             checkbox.checked = true; // Set back to default (checked)
+        });
+        // Hide all bonus sections and reset button text
+        document.querySelectorAll('.bonus-section').forEach(section => {
+            section.style.display = 'none';
+        });
+        document.querySelectorAll('.btn-toggle-bonus').forEach(btn => {
+            btn.textContent = 'Settings';
         });
     }
 
