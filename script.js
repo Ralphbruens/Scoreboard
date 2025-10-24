@@ -207,7 +207,7 @@ class ScoreboardApp {
         // Field-specific bonus ranges
         const fieldRanges = [
             { min: 6, max: 16 },  // Field 1: 6-16 seconds
-            { min: 20, max: 30 }, // Field 2: 20-30 seconds
+            { min: 15, max: 25 }, // Field 2: 15-25 seconds
             { min: 0, max: 0 },   // Field 3: 0 seconds
             { min: 12, max: 22 }, // Field 4: 12-22 seconds
             { min: 2, max: 10 }   // Field 5: 2-10 seconds
